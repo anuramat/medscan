@@ -16,7 +16,8 @@ def predict_image_from_bytes(bytes):
     pil_img = Image.open(BytesIO(bytes)).convert('RGB')
     cv_img = np.array(pil_img)
     cv_img = cv_img[:, :, ::-1].copy() 
-    medscan.predict(cv_img) 
+    return medscan.predict(cv_img) 
+    
 
 @app.route("/")
 def index():
