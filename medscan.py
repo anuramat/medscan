@@ -85,20 +85,28 @@ def prettier_text(input_text):
     return output_text
 
 def chinchoppa(text, keywords=None):
+    flag = '中' # flag indicates token start
+    flag2 = '鹿' # flag indicates shit between last part and the token start
+    # probably will be removed, so that the shit='', flag2=flag, and we can
+    # split the result by flag1
+    re_not_starting_with = lambda x: f'(?<!{x})'
     if not keywords:
         keywords = ['диагноз', 'анамнез', 'данные осмотра', 'даты госпитализации', 'данные лабораторного-инструментального обследования', 'консультации специалистов', 'рекомендации', 'ФИО пациента', 'номер страхового свидетельства', 'дата рождения пациента', 'дата документа', 'орган выдавший документ (код подразделения)', 'адрес регистрации', 'СНИЛС']
 
+    keywords = sorted(keywords, key=len, reverse=True)
     for word in keywords:
-        temp = re.split(word,text, flags=re.IGNORECASE)
-        '''
+        temp = re.split(re_not_starting_with(flag)+word, text, flags=re.IGNORECASE)
+        
         for i in range(len(temp)):
-            xd = re.search('[a-zA-Z0-9<>/]',temp[i])
+            xd = re.search(f'[a-zA-Z0-9а-яёА-ЯЁ{flag2}]',temp[i]) 
             if xd: 
                 temp[i] = temp[i][xd.start():]
-        '''
-        divider = '<br/>---'+word.upper()+'---<br/>'
+
+        divider = flag2+'<br/>---'+flag+word.upper()+'---<br/>'
         text = divider.join(temp)
-        
+
+    text = text.replace(flag,'').replace(flag2,'')
+
     return text
 
 
