@@ -17,7 +17,9 @@
     </form>
 
     {% if text %}
+    {% autoescape false %}
     <p>{{text}}</p>
+    {% endautoescape %}
     {% endif %}
 </body>
 

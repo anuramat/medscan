@@ -5,6 +5,7 @@ from functools import reduce
 import numpy as np
 from scipy.ndimage import interpolation as inter
 import pytesseract
+import re
 
 # get grayscale image
 def get_grayscale(image):
@@ -83,9 +84,27 @@ def prettier_text(input_text):
         
     return output_text
 
+def chinchoppa(text, keywords=None):
+    if not keywords:
+        keywords = ['диагноз', 'анамнез', 'данные осмотра', 'даты госпитализации', 'данные лабораторного-инструментального обследования', 'консультации специалистов', 'рекомендации', 'ФИО пациента', 'номер страхового свидетельства', 'дата рождения пациента', 'дата документа', 'орган выдавший документ (код подразделения)', 'адрес регистрации', 'СНИЛС']
+
+    for word in keywords:
+        temp = re.split(word,text, flags=re.IGNORECASE)
+        '''
+        for i in range(len(temp)):
+            xd = re.search('[a-zA-Z0-9<>/]',temp[i])
+            if xd: 
+                temp[i] = temp[i][xd.start():]
+        '''
+        divider = '<br/>---'+word.upper()+'---<br/>'
+        text = divider.join(temp)
+        
+    return text
+
 
 def predict(input_img):
     preprocessing_functions = [get_grayscale,         correct_skew,]
     output_img = reduce(lambda x,y: y(x), preprocessing_functions, input_img)
     raw_output = pytesseract.image_to_string(output_img, lang='rus+eng',)
-    return prettier_text(raw_output)
+    prettier = prettier_text(raw_output)
+    return chinchoppa(prettier)

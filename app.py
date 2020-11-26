@@ -32,4 +32,6 @@ def upload():
     if not allowed_file(file_.filename):
         return render_template("index.html", text="unsupported format.")
     result = predict_image_from_bytes(bytes)
+    print('SOMEONE USED THE APP')
+    print(result[:140])
     return render_template("index.html", text=result)
