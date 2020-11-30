@@ -84,16 +84,30 @@ def prettier_text(input_text):
         
     return output_text
 
+# todo add try except?
+with open('default_keywords.txt','r') as keyword_file:
+    default_keywords = keyword_file.read().split('\n')
+# todo remove len constraint?
+default_keywords = [word.strip() for word in default_keywords if len(word)>2]
+
+
 def chinchoppa(text, keywords=None):
+    # all this shit doesn't work if the text looks like:
+    # token1token2 ... token1 ... token2
+    # and the keywords = [token1, token2, token1token2]
+    # since there will be no flag before token2 in token1token2
+    # have to think of something else afterwards
+    # maybe third flag after the end of token? do not look for smaller tokens inside of the token, insides being everything between flag and flag3
     flag = '中' # flag indicates token start
     flag2 = '鹿' # flag indicates shit between last part and the token start
+    # todo:
     # probably will be removed, so that the shit='', flag2=flag, and we can
     # split the result by flag1
     re_not_starting_with = lambda x: f'(?<!{x})'
     if not keywords:
-        keywords = ['диагноз', 'анамнез', 'данные осмотра', 'даты госпитализации', 'данные лабораторного-инструментального обследования', 'консультации специалистов', 'рекомендации', 'ФИО пациента', 'номер страхового свидетельства', 'дата рождения пациента', 'дата документа', 'орган выдавший документ (код подразделения)', 'адрес регистрации', 'СНИЛС']
-
+        keywords = default_keywords
     keywords = sorted(keywords, key=len, reverse=True)
+    print(keywords)
     for word in keywords:
         temp = re.split(re_not_starting_with(flag)+word, text, flags=re.IGNORECASE)
         

@@ -7,7 +7,7 @@ print('Initial text:')
 print(text)
 for i in range(3):
     print('-----------')
-result = medscan.chinchoppa(text, keywords=['token1', 'token1 token2'])
+result = medscan.chinchoppa(text)#, keywords=['token1', 'token1 token2'])
 print(result)
 
 
