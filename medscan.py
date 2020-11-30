@@ -84,13 +84,13 @@ def prettier_text(input_text):
         
     return output_text
 
-# todo add try except?
+# TODO add try except?
 with open('default_keywords.txt','r') as keyword_file:
     default_keywords = keyword_file.read().split('\n')
-# todo remove len constraint?
+# TODO remove len constraint?
 default_keywords = [word.strip() for word in default_keywords if len(word)>2]
 
-
+'''
 def chinchoppa(text, keywords=None):
     # all this shit doesn't work if the text looks like:
     # token1token2 ... token1 ... token2
@@ -107,7 +107,6 @@ def chinchoppa(text, keywords=None):
     if not keywords:
         keywords = default_keywords
     keywords = sorted(keywords, key=len, reverse=True)
-    print(keywords)
     for word in keywords:
         temp = re.split(re_not_starting_with(flag)+word, text, flags=re.IGNORECASE)
         
@@ -120,6 +119,38 @@ def chinchoppa(text, keywords=None):
         text = divider.join(temp)
 
     text = text.replace(flag,'').replace(flag2,'')
+
+    return text
+'''
+
+# reworked
+from more_itertools import intersperse
+def chinchoppa(text, keywords=None, start='<br/>---', end='---<br/>'):
+    if not keywords:
+        keywords = default_keywords
+    keywords = sorted(keywords, key=len, reverse=True)
+    pieces = [text]
+    is_header = [False]
+    for keyword in keywords:
+        piece_idx = 0
+        while piece_idx < len(pieces):
+            if not is_header[piece_idx]:
+                temp = re.split('\W'+keyword+'\W', pieces[piece_idx], flags=re.IGNORECASE)
+                # clean shit
+                for i in range(len(temp)):
+                    xd = re.search(f'[\w]', temp[i]) 
+                    if xd:
+                        temp[i] = temp[i][xd.start():]
+                header_bullshit = [False]*len(temp)
+                header_bullshit = list(intersperse(True, header_bullshit))
+                temp = list(intersperse(start+keyword.upper()+end, temp))
+                pieces[piece_idx:piece_idx+1] = temp
+                is_header[piece_idx:piece_idx+1] = header_bullshit
+                piece_idx += len(temp) 
+            else:
+                piece_idx += 1
+                
+    text = ''.join(pieces)
 
     return text
 
