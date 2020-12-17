@@ -89,41 +89,9 @@ with open('default_keywords.txt','r') as keyword_file:
     default_keywords = keyword_file.read().split('\n')
 # TODO remove len constraint?
 default_keywords = [word.strip() for word in default_keywords if len(word)>2]
+default_keywords = [word[0].upper()+word[1:] for word in default_keywords]
 
-'''
-def chinchoppa(text, keywords=None):
-    # all this shit doesn't work if the text looks like:
-    # token1token2 ... token1 ... token2
-    # and the keywords = [token1, token2, token1token2]
-    # since there will be no flag before token2 in token1token2
-    # have to think of something else afterwards
-    # maybe third flag after the end of token? do not look for smaller tokens inside of the token, insides being everything between flag and flag3
-    flag = '中' # flag indicates token start
-    flag2 = '鹿' # flag indicates shit between last part and the token start
-    # todo:
-    # probably will be removed, so that the shit='', flag2=flag, and we can
-    # split the result by flag1
-    re_not_starting_with = lambda x: f'(?<!{x})'
-    if not keywords:
-        keywords = default_keywords
-    keywords = sorted(keywords, key=len, reverse=True)
-    for word in keywords:
-        temp = re.split(re_not_starting_with(flag)+word, text, flags=re.IGNORECASE)
-        
-        for i in range(len(temp)):
-            xd = re.search(f'[a-zA-Z0-9а-яёА-ЯЁ{flag2}]',temp[i]) 
-            if xd: 
-                temp[i] = temp[i][xd.start():]
 
-        divider = flag2+'<br/>---'+flag+word.upper()+'---<br/>'
-        text = divider.join(temp)
-
-    text = text.replace(flag,'').replace(flag2,'')
-
-    return text
-'''
-
-# reworked
 from more_itertools import intersperse
 def chinchoppa(text, keywords=None, start='<br/>---', end='---<br/>'):
     if not keywords:
@@ -135,7 +103,7 @@ def chinchoppa(text, keywords=None, start='<br/>---', end='---<br/>'):
         piece_idx = 0
         while piece_idx < len(pieces):
             if not is_header[piece_idx]:
-                temp = re.split('\W'+keyword+'\W', pieces[piece_idx], flags=re.IGNORECASE)
+                temp = re.split(keyword+'[\n:]', pieces[piece_idx])#, flags=re.IGNORECASE)
                 # clean shit
                 for i in range(len(temp)):
                     xd = re.search(f'[\w]', temp[i]) 
@@ -149,15 +117,26 @@ def chinchoppa(text, keywords=None, start='<br/>---', end='---<br/>'):
                 piece_idx += len(temp) 
             else:
                 piece_idx += 1
+    
+    piece_idx = 1
+    while piece_idx < len(pieces):
+        if not is_header[piece_idx] and not is_header[piece_idx-1]:
+            is_header.pop(piece_idx)
+            pieces[piece_idx-1] += pieces[piece_idx]
+            pieces.pop(piece_idx)
+        else:
+            piece_idx += 1
+
+    print(pieces)
+    print(is_header)
                 
     text = ''.join(pieces)
 
     return text
-
-
+ 
 def predict(input_img):
     preprocessing_functions = [get_grayscale,         correct_skew,]
     output_img = reduce(lambda x,y: y(x), preprocessing_functions, input_img)
     raw_output = pytesseract.image_to_string(output_img, lang='rus+eng',)
-    prettier = prettier_text(raw_output)
-    return chinchoppa(prettier)
+    test_output = raw_output.replace(' ','*').replace('\n','^') 
+    return prettier_text(chinchoppa(raw_output))
