@@ -6,6 +6,9 @@ import numpy as np
 from scipy.ndimage import interpolation as inter
 import pytesseract
 import re
+from more_itertools import intersperse
+from mydata import raw_default_kwdict # group1: [el1, el2...]
+from collections import defaultdict
 
 # get grayscale image
 def get_grayscale(image):
@@ -92,7 +95,12 @@ default_keywords = [word.strip() for word in default_keywords if len(word)>2]
 #default_keywords = [word[0].upper()+word[1:] for word in default_keywords]
 
 
-from more_itertools import intersperse
+default_kwdict = {} # el1: group1, el2: group2
+for group, elements in raw_default_kwdict.items():
+    default_kwdict.update(dict.fromkeys(elements,group))
+default_keywords = default_kwdict.keys()
+
+
 def chinchoppa(text, keywords=None):
     
     if not keywords:
@@ -144,7 +152,7 @@ def chinchoppa(text, keywords=None):
 
     return pieces_dict
 
-def chopped_to_deubg_text(chopped_dict,start='<br/>---',end='---<br/>'):
+def chopped_to_debug_text(chopped_dict,start='<br/>---',end='---<br/>'):
     result = ''
     for kw in chopped_dict:
         if kw=='junk':
@@ -154,11 +162,26 @@ def chopped_to_deubg_text(chopped_dict,start='<br/>---',end='---<br/>'):
     return result
 
 
+def chopped_to_dict(chopped_dict, keyword_dict=None):
+    if keyword_dict==None:
+        keyword_dict = default_kwdict
+    result = defaultdict(str)
+    for kw in chopped_dict:
+        result[keyword_dict[kw]] += chopped_dict[kw]
+    return result
  
-def predict(input_img):
+def predict_debug(input_img):
     preprocessing_functions = [get_grayscale,         correct_skew,]
     output_img = reduce(lambda x,y: y(x), preprocessing_functions, input_img)
     raw_output = pytesseract.image_to_string(output_img, lang='rus+eng',)
     test_output = raw_output.replace(' ','*').replace('\n','^') 
     chopped_dict = chinchoppa(raw_output)
     return prettier_text(chopped_to_debug_text(chopped_dict))
+
+def predict(input_img):
+    preprocessing_functions = [get_grayscale,         correct_skew,]
+    output_img = reduce(lambda x,y: y(x), preprocessing_functions, input_img)
+    raw_output = pytesseract.image_to_string(output_img, lang='rus+eng',)
+    test_output = raw_output.replace(' ','*').replace('\n','^') 
+    chopped_dict = chinchoppa(raw_output)
+    return chopped_to_dict(chopped_dict)

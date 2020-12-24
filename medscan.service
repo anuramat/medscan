@@ -1,0 +1,11 @@
+[Unit]
+Description=Description
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/
+ExecStart=/home/myuser/.conda/envs/my_env/bin/python my_server.py
+
+[Install]
+WantedBy=default.target
