@@ -101,6 +101,7 @@ lz4-c=1.9.2=he1b5a44_3
 lzo=2.10=h516909a_1000
 markupsafe=1.1.1=py39h38d8fee_2
 mistune=0.8.4=py39h07f9747_1002
+more-itertools=8.6.0=pypi_0
 mysql-common=8.0.21=2
 mysql-libs=8.0.21=hf3661c5_2
 nbclient=0.5.1=py_0
