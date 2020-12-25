@@ -1,11 +1,11 @@
 [Unit]
-Description=Description
+Description=medscan
 After=network.target
 
 [Service]
-Type=simple
-WorkingDirectory=/path/to/
-ExecStart=/home/myuser/.conda/envs/my_env/bin/python my_server.py
+User=admin
+WorkingDirectory=/home/admin
+ExecStart=/home/admin/miniconda3/envs/medscan/bin/python /home/admin/dev/medscan/wsgi.py
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

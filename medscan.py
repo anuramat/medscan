@@ -87,14 +87,6 @@ def prettier_text(input_text):
         
     return output_text
 
-# TODO add try except?
-with open('default_keywords.txt','r') as keyword_file:
-    default_keywords = keyword_file.read().split('\n')
-# TODO remove len constraint?
-default_keywords = [word.strip() for word in default_keywords if len(word)>2]
-#default_keywords = [word[0].upper()+word[1:] for word in default_keywords]
-
-
 default_kwdict = {} # el1: group1, el2: group2
 for group, elements in raw_default_kwdict.items():
     default_kwdict.update(dict.fromkeys(elements,group))
