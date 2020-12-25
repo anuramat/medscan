@@ -29,10 +29,8 @@ def predict_image_from_bytes(bytes):
 def index():
     return render_template("index.html", text=False)
 
-# TODO rename upload to upload_debug, upload_2 to upload
-
-@app.route("/upload", methods=["POST"])
-def upload():
+@app.route("/manual_upload", methods=["POST"])
+def manual_upload():
     file_ = request.files["file"]
     bytes = file_.read()
     if not file_:
@@ -42,11 +40,11 @@ def upload():
     result = predict_image_from_bytes_debug(bytes)
     return render_template("index.html", text=result)
 
-@app.route("/upload_2", methods=["POST"])
-def upload_2():
+@app.route("/upload", methods=["POST"])
+def upload():
     file_ = request.files["file"]
     bytes = file_.read()
     if not file_ or not allowed_file(file_.filename):
-        return {'error': 'idinaxuy'}
+        return {'error': 'error'}
     result = predict_image_from_bytes(bytes)
     return result

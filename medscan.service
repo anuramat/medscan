@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 User=admin
-WorkingDirectory=/home/admin
-ExecStart=/home/admin/miniconda3/envs/medscan/bin/python /home/admin/dev/medscan/wsgi.py
+WorkingDirectory=/home/admin/dev/medscan/
+ExecStart=/home/admin/dev/medscan/start.sh
 
 [Install]
 WantedBy=multi-user.target
