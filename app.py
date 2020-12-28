@@ -50,6 +50,6 @@ def upload():
     file_ = request.files["file"]
     bytes = file_.read()
     if not file_ or not allowed_file(file_.filename):
-        return {'error': 'error'}
+        return {'error': True}
     result = predict_image_from_bytes(bytes)
     return result
