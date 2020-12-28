@@ -3,7 +3,11 @@ from io import BytesIO
 from PIL import Image
 import medscan
 import numpy as np
+from flask_cors import CORS, cross_origin
+
 app = Flask(__name__)
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 
 ext_list = ["png", "jpg","jpeg"]
 ext_list += [i.upper() for i in ext_list]
@@ -41,6 +45,7 @@ def manual_upload():
     return render_template("index.html", text=result)
 
 @app.route("/upload", methods=["POST"])
+@cross_origin()
 def upload():
     file_ = request.files["file"]
     bytes = file_.read()
