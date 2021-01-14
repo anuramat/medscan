@@ -34,8 +34,8 @@ def index():
     return render_template("index.html", text=False)
 
 
-@app.route("/debug_upload", methods=["POST"])
-def debug_upload():
+@app.route("/manual_upload", methods=["POST"])
+def manual_upload():
     file_ = request.files["file"]
     bytes = file_.read()
     result = predict_from_bytes(bytes, debug=True, pdf=get_ext(file_.filename)=='pdf')

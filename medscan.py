@@ -95,7 +95,6 @@ def transpose_dict(input_dict):
 kws2sections = transpose_dict(sections2kws)
 
 def chinchoppa(text):
-    
      
     fields = {}
     
@@ -115,57 +114,59 @@ def chinchoppa(text):
  
     sections_kws = kws2sections.keys()
     sections_kws = sorted(sections_kws, key=len, reverse=True)
+    # break down text into keyword and surrounding text until we run out of keywords
+    # keep text in original order in pieces, and its type in is_kw
     pieces = [text]
-    is_header = [False]
+    is_kw = [False]
     for kw in sections_kws:
         piece_idx = 0
         while piece_idx < len(pieces):
-            if not is_header[piece_idx]:
+            if not is_kw[piece_idx]:
                 kw_ = kw[0].upper() + kw[1:]
-                temp = re.split(f'\n{kw_}|{kw_}[\n:]', pieces[piece_idx])#, flags=re.IGNORECASE) # с большой буквы, заканчивается на двоеточие
-                # clean shit
-                # убирает в начале блока хуевые символы (не альфанумерик)
-                for i in range(len(temp)):
-                    xd = re.search(f'[\w]', temp[i]) 
-                    if xd:
-                        temp[i] = temp[i][xd.start():]
-                header_bullshit = [False]*len(temp)
-                header_bullshit = list(intersperse(True, header_bullshit))
-                temp = list(intersperse(kw, temp))
-                pieces[piece_idx:piece_idx+1] = temp
-                is_header[piece_idx:piece_idx+1] = header_bullshit
-                piece_idx += len(temp) 
+                sub_pieces = re.split(f'\n{kw_}|{kw_}[\n:]', pieces[piece_idx]) # с большой буквы, заканчивается на двоеточие
+                # remove non-alphanumeric symbols in the start of the string 
+                for i in range(1, len(sub_pieces)):
+                    match = re.search(f'[\w]', sub_pieces[i]) 
+                    if match:
+                        sub_pieces[i] = sub_pieces[i][match.start():]
+                sub_is_kw = [False]*len(sub_pieces)
+                sub_is_kw = list(intersperse(True, sub_is_kw))
+                sub_pieces = list(intersperse(kw, sub_pieces))
+                pieces[piece_idx:piece_idx+1] = sub_pieces
+                is_kw[piece_idx:piece_idx+1] = sub_is_kw
+                piece_idx += len(sub_pieces) 
             else:
                 piece_idx += 1
     
+    # concat consecutive blocks of non header text 
     piece_idx = 1
     while piece_idx < len(pieces):
-        if not is_header[piece_idx] and not is_header[piece_idx-1]:
-            is_header.pop(piece_idx)
+        if not is_kw[piece_idx] and not is_kw[piece_idx-1]:
+            is_kw.pop(piece_idx)
             pieces[piece_idx-1] += pieces[piece_idx]
             pieces.pop(piece_idx)
         else:
             piece_idx += 1
-
-    pieces_dict = {'junk':''}
-    if is_header[0] == False:
-        pieces_dict['junk'] += pieces[0]
-        start_idx = 1
-    else:
-        start_idx = 0
-    # govnokod
-    if (len(pieces)-start_idx) % 2 != 0:
+    # now it's always ...header-nonheader-header-...
+    
+    # make sure we have in pieces n pairs of (header, text)
+    if is_kw[0] == False:
+        pieces.insert(0, 'junk')
+        is_kw.insert(0, True)
+    if len(pieces) % 2 != 0:
         pieces.append('')
-        
-    for piece_idx in range(start_idx,len(pieces),2):
-        pieces_dict[pieces[piece_idx]] = pieces[piece_idx+1]
-
-    kw2sectiontext = pieces_dict
+    
+    # finally put them in our dict 
+    kw2sectiontext = {}   
+    for piece_idx in range(0,len(pieces),2):
+        kw2sectiontext[pieces[piece_idx]] = pieces[piece_idx+1]
+    
+    # move from keywords to internal section names
     result = kwdict2sectiondict(kw2sectiontext)
 
     for section in result:
-        result[section] = prettier_text(result[section])
-    result.update(fields)
+        result[section] = prettier_text(result[section]) # prettify them
+    result.update(fields) # add fields to the result (such as name and date)
     return result
 
 def dict2debug(dict_,start='<br/>---',end='---<br/>'):
