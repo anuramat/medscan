@@ -1,14 +1,13 @@
 from PIL import Image
 import cv2 
-from IPython.display import display
-from functools import reduce
 import numpy as np
 from scipy.ndimage import interpolation as inter
 import pytesseract
 import re
 from more_itertools import intersperse
-from mydata import raw_default_kwdict # group1: [el1, el2...]
+from ms_keywords import sections2kws, fields2kws # {str: [str]}
 from collections import defaultdict
+from functools import reduce
 
 # get grayscale image
 def get_grayscale(image):
@@ -87,25 +86,43 @@ def prettier_text(input_text):
         
     return output_text
 
-default_kwdict = {} # el1: group1, el2: group2
-for group, elements in raw_default_kwdict.items():
-    default_kwdict.update(dict.fromkeys(elements,group))
-default_keywords = default_kwdict.keys()
+def transpose_dict(input_dict):
+    new_dict = {}
+    for group, elements in input_dict.items():
+        new_dict.update(dict.fromkeys(elements,group))
+    return new_dict
 
+kws2sections = transpose_dict(sections2kws)
 
-def chinchoppa(text, keywords=None):
+def chinchoppa(text):
+    
      
-    if not keywords:
-        keywords = default_keywords
-    keywords = sorted(keywords, key=len, reverse=True)
+    fields = {}
+    
+    # name
+    for kw in fields2kws['name']:
+        temp = text.split(kw, 1)
+        if len(temp)==1:
+            continue
+        temp = temp[1]
+        name_match = re.search('\w', temp) 
+        if name_match:
+            name = ' '.join(temp[name_match.start():].split(' ')[:3])
+            fields['name'] = name
+            break
+
+    # TODO date 
+ 
+    sections_kws = kws2sections.keys()
+    sections_kws = sorted(sections_kws, key=len, reverse=True)
     pieces = [text]
     is_header = [False]
-    for keyword in keywords:
+    for kw in sections_kws:
         piece_idx = 0
         while piece_idx < len(pieces):
             if not is_header[piece_idx]:
-                kw = keyword[0].upper() + keyword[1:]
-                temp = re.split(f'\n{kw}|{kw}[\n:]', pieces[piece_idx])#, flags=re.IGNORECASE) # с большой буквы, заканчивается на двоеточие
+                kw_ = kw[0].upper() + kw[1:]
+                temp = re.split(f'\n{kw_}|{kw_}[\n:]', pieces[piece_idx])#, flags=re.IGNORECASE) # с большой буквы, заканчивается на двоеточие
                 # clean shit
                 # убирает в начале блока хуевые символы (не альфанумерик)
                 for i in range(len(temp)):
@@ -114,7 +131,7 @@ def chinchoppa(text, keywords=None):
                         temp[i] = temp[i][xd.start():]
                 header_bullshit = [False]*len(temp)
                 header_bullshit = list(intersperse(True, header_bullshit))
-                temp = list(intersperse(keyword, temp))
+                temp = list(intersperse(kw, temp))
                 pieces[piece_idx:piece_idx+1] = temp
                 is_header[piece_idx:piece_idx+1] = header_bullshit
                 piece_idx += len(temp) 
@@ -155,12 +172,12 @@ def chopped_to_debug_text(chopped_dict,start='<br/>---',end='---<br/>'):
     return result
 
 
-def chopped_to_dict(chopped_dict, keyword_dict=None):
-    if keyword_dict==None:
-        keyword_dict = default_kwdict
+def kwdict2sectiondict(kw2sectiontext):
+    # {keyword : value} - > {section : value}
     result = defaultdict(str)
     for kw in chopped_dict:
-        result[keyword_dict[kw]] += chopped_dict[kw]
+        section = kws2sections[kw]
+        result[section] += kw2sectiontext[kw] + '\n'
     return result
  
 preprocessing_functions = [get_grayscale,         correct_skew,]

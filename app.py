@@ -35,11 +35,17 @@ def index():
 
 
 @app.route("/debug_upload", methods=["POST"])
-def manual_upload():
+def debug_upload():
     file_ = request.files["file"]
     bytes = file_.read()
     result = predict_from_bytes(bytes, debug=True, pdf=get_ext(file_.filename)=='pdf')
     return render_template("index.html", text=result)
+
+import time
+@app.route("/slow_request", methods=["POST","GET"])
+def slow_request():
+    time.sleep(10)
+    return {'xd':'xd'} 
 
 @app.route("/upload", methods=["POST"])
 @cross_origin()
