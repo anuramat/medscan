@@ -69,7 +69,7 @@ def correct_skew(image, delta=1, limit=5, input_is_gray=False):
     return rotated
     return best_angle, rotated
 
-
+# TODO not even sure if works
 def prettier_text(input_text):
     output_text = input_text
     output_text = ' '.join([i for i in output_text.split(' ') if i]) # remove consecutive spaces
@@ -160,34 +160,39 @@ def chinchoppa(text):
     for piece_idx in range(start_idx,len(pieces),2):
         pieces_dict[pieces[piece_idx]] = pieces[piece_idx+1]
 
-    return pieces_dict
+    kw2sectiontext = pieces_dict
+    result = kwdict2sectiondict(kw2sectiontext)
 
-def chopped_to_debug_text(chopped_dict,start='<br/>---',end='---<br/>'):
-    result = ''
-    for kw in chopped_dict:
-        if kw=='junk':
-            result+=chopped_dict['junk']
-        else:
-            result+=start+kw.upper()+end+chopped_dict[kw]
+    for section in result:
+        result[section] = prettier_text(result[section])
+    result.update(fields)
     return result
 
+def dict2debug(dict_,start='<br/>---',end='---<br/>'):
+    result = ''
+    for kw in dict_:
+        if kw=='junk':
+            result+=dict_['junk']
+        else:
+            result+=start+kw.upper()+end+dict_[kw]
+    return result
 
 def kwdict2sectiondict(kw2sectiontext):
     # {keyword : value} - > {section : value}
-    result = defaultdict(str)
-    for kw in chopped_dict:
+    sectiondict = defaultdict(str)
+    for kw in kw2sectiontext:
         section = kws2sections[kw]
-        result[section] += kw2sectiontext[kw] + '\n'
-    return result
+        sectiondict[section] += kw2sectiontext[kw] + '\n'
+    return sectiondict
  
 preprocessing_functions = [get_grayscale,         correct_skew,]
 apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
 
 def predict(input_image_list, debug=False):
-    output_images = [apply_preprocessing(img) for img in input_image_list]
-    raw_output = ' '.join([pytesseract.image_to_string(img, lang='rus+eng',) for img in output_images])
-    result_dict = chinchoppa(raw_output)
+    preprocessed_images = [apply_preprocessing(img) for img in input_image_list]
+    raw_text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng',) for img in preprocessed_images])
+    result = chinchoppa(raw_text)
     if debug:
-        return prettier_text(chopped_to_debug_text(chopped_dict))
+        return dict2debug(result)
     else:
-        return chopped_to_dict(result_dict) 
+        return result
