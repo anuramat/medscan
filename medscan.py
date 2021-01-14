@@ -94,7 +94,7 @@ default_keywords = default_kwdict.keys()
 
 
 def chinchoppa(text, keywords=None):
-    
+     
     if not keywords:
         keywords = default_keywords
     keywords = sorted(keywords, key=len, reverse=True)
@@ -104,7 +104,8 @@ def chinchoppa(text, keywords=None):
         piece_idx = 0
         while piece_idx < len(pieces):
             if not is_header[piece_idx]:
-                temp = re.split(keyword[0].upper()+keyword[1:]+'[\n:]', pieces[piece_idx])#, flags=re.IGNORECASE) # с большой буквы, заканчивается на двоеточие
+                kw = keyword[0].upper() + keyword[1:]
+                temp = re.split(f'\n{kw}|{kw}[\n:]', pieces[piece_idx])#, flags=re.IGNORECASE) # с большой буквы, заканчивается на двоеточие
                 # clean shit
                 # убирает в начале блока хуевые символы (не альфанумерик)
                 for i in range(len(temp)):
@@ -162,18 +163,14 @@ def chopped_to_dict(chopped_dict, keyword_dict=None):
         result[keyword_dict[kw]] += chopped_dict[kw]
     return result
  
-def predict_debug(input_img):
-    preprocessing_functions = [get_grayscale,         correct_skew,]
-    output_img = reduce(lambda x,y: y(x), preprocessing_functions, input_img)
-    raw_output = pytesseract.image_to_string(output_img, lang='rus+eng',)
-    test_output = raw_output.replace(' ','*').replace('\n','^') 
-    chopped_dict = chinchoppa(raw_output)
-    return prettier_text(chopped_to_debug_text(chopped_dict))
+preprocessing_functions = [get_grayscale,         correct_skew,]
+apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
 
-def predict(input_img):
-    preprocessing_functions = [get_grayscale,         correct_skew,]
-    output_img = reduce(lambda x,y: y(x), preprocessing_functions, input_img)
-    raw_output = pytesseract.image_to_string(output_img, lang='rus+eng',)
-    test_output = raw_output.replace(' ','*').replace('\n','^') 
-    chopped_dict = chinchoppa(raw_output)
-    return chopped_to_dict(chopped_dict)
+def predict(input_image_list, debug=False):
+    output_images = [apply_preprocessing(img) for img in input_image_list]
+    raw_output = ' '.join([pytesseract.image_to_string(img, lang='rus+eng',) for img in output_images])
+    result_dict = chinchoppa(raw_output)
+    if debug:
+        return prettier_text(chopped_to_debug_text(chopped_dict))
+    else:
+        return chopped_to_dict(result_dict) 

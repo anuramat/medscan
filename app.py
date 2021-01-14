@@ -4,44 +4,41 @@ from PIL import Image
 import medscan
 import numpy as np
 from flask_cors import CORS, cross_origin
+import pdf2image
 
 app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 
-ext_list = ["png", "jpg","jpeg"]
-ext_list += [i.upper() for i in ext_list]
-ALLOWED_EXTENSIONS = set(ext_list)
+ok_exts = {"png", "jpg","jpeg", "pdf"}
+get_ext = lambda x: x.split('.')[-1].lower()
 
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1] in ALLOWED_EXTENSIONS
+#TODO remove copy?
+def pil2cv(image):
+    temp = np.asarray(image)
+    return temp[:, :, ::-1].copy()
 
-def predict_image_from_bytes_debug(bytes):
-    pil_img = Image.open(BytesIO(bytes)).convert('RGB')
-    cv_img = np.array(pil_img)
-    cv_img = cv_img[:, :, ::-1].copy() 
-    return medscan.predict_debug(cv_img)
+def predict_from_bytes(bytes, pdf=False, debug=False):
+    if pdf:
+        image_list = pdf2image.convert_from_bytes(bytes)
+    else:
+        image_list = [Image.open(BytesIO(bytes))]
 
-def predict_image_from_bytes(bytes):
-    pil_img = Image.open(BytesIO(bytes)).convert('RGB')
-    cv_img = np.array(pil_img)
-    cv_img = cv_img[:, :, ::-1].copy() 
-    return medscan.predict(cv_img) 
+    image_list = [pil2cv(img.convert('RGB')) for img in image_list]
+
+    return medscan.predict(image_list, debug=debug)
     
 
 @app.route("/")
 def index():
     return render_template("index.html", text=False)
 
-@app.route("/manual_upload", methods=["POST"])
+
+@app.route("/debug_upload", methods=["POST"])
 def manual_upload():
     file_ = request.files["file"]
     bytes = file_.read()
-    if not file_:
-        return render_template("index.html", text="could you please upload a file?")
-    if not allowed_file(file_.filename):
-        return render_template("index.html", text="unsupported format.")
-    result = predict_image_from_bytes_debug(bytes)
+    result = predict_from_bytes(bytes, debug=True, pdf=get_ext(file_.filename)=='pdf')
     return render_template("index.html", text=result)
 
 @app.route("/upload", methods=["POST"])
@@ -49,7 +46,7 @@ def manual_upload():
 def upload():
     file_ = request.files["file"]
     bytes = file_.read()
-    if not file_ or not allowed_file(file_.filename):
+    if not file_ or get_ext(file_.filename) not in ok_exts:
         return {'error': True}
-    result = predict_image_from_bytes(bytes)
+    result = predict_from_bytes(bytes, pdf=get_ext(file_.filename)=='pdf')
     return result
