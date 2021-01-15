@@ -2,6 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 
+# for manual_upload path
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+templates = Jinja2Templates(directory="templates")
+
 from io import BytesIO
 from PIL import Image
 import medscan
@@ -49,14 +54,14 @@ def index():
     return render_template("index.html", text=False)
 
 
-@app.post("/manual_upload")
-async def manual_upload():
+@app.post("/manual_upload", response_class=HTMLResponse)
+async def manual_upload(request):
     file_ = request.files["file"]
     bytes = file_.read()
     loop = asyncio.get_event_loop()
     with concurrent.futures.ProcessPoolExecutor() as pool:
         result = await loop.run_in_executor(pool, predict_from_bytes(bytes, debug=True, pdf=get_ext(file_.filename)=='pdf'))
-    return render_template("index.html", text=result)
+    return templates.TemplateResponse("index.html", {"request": request, "text": result})
 
 @app.post("/upload")
 async def upload():
@@ -68,3 +73,7 @@ async def upload():
     with concurrent.futures.ProcessPoolExecutor() as pool:
         result = await loop.run_in_executor(pool, predict_from_bytes(bytes, pdf=get_ext(file_.filename)=='pdf'))
     return result
+
+if __name__ == "__main__":
+    uvicorn.run("app:app") # filename:app
+    # to run: # uvicorn run fastapi_code:app (--reload for fast reloading)
