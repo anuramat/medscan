@@ -39,11 +39,11 @@ def pil2cv(image):
     temp = np.asarray(image)
     return temp[:, :, ::-1].copy()
 
-def predict_from_bytes(file, pdf=False, debug=False):
+def predict_from_bytes(data, pdf=False, debug=False):
     if pdf:
-        image_list = pdf2image.convert_from_bytes(file)
+        image_list = pdf2image.convert_from_bytes(data)
     else:
-        image_list = [Image.open(BytesIO(file))]
+        image_list = [Image.open(BytesIO(data))]
 
     image_list = [pil2cv(img.convert('RGB')) for img in image_list]
 
@@ -70,7 +70,7 @@ async def upload(file: UploadFile = File(...)):
     data = await file.read()
     loop = asyncio.get_event_loop()
     with concurrent.futures.ProcessPoolExecutor() as pool:
-        result = await loop.run_in_executor(pool, predict_from_bytes(data, pdf=get_ext(file.filename)=='pdf'))
+        result = await loop.run_in_executor(pool, predict_from_bytes, data, get_ext(file.filename)=='pdf')
     return result
 
 if __name__ == "__main__":
