@@ -189,14 +189,11 @@ tags
 [._]*.un~
 
 ### vscode ###
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+.vscode
 *.code-workspace
 
 # End of https://www.toptal.com/developers/gitignore/api/linux,python,vscode,vim,jupyternotebooks
+
 
 *.jpg
 *.pdf
