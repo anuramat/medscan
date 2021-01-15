@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
+import concurrent
 
 # for manual_upload path
 from fastapi.templating import Jinja2Templates
@@ -38,11 +39,11 @@ def pil2cv(image):
     temp = np.asarray(image)
     return temp[:, :, ::-1].copy()
 
-def predict_from_bytes(bytes, pdf=False, debug=False):
+def predict_from_bytes(file, pdf=False, debug=False):
     if pdf:
-        image_list = pdf2image.convert_from_bytes(bytes)
+        image_list = pdf2image.convert_from_bytes(file)
     else:
-        image_list = [Image.open(BytesIO(bytes))]
+        image_list = [Image.open(BytesIO(file))]
 
     image_list = [pil2cv(img.convert('RGB')) for img in image_list]
 
@@ -55,23 +56,21 @@ def index():
 
 
 @app.post("/manual_upload", response_class=HTMLResponse)
-async def manual_upload(request):
-    file_ = request.files["file"]
-    bytes = file_.read()
+async def manual_upload(file: UploadFile = File(...)):
+    data = file.read()
     loop = asyncio.get_event_loop()
     with concurrent.futures.ProcessPoolExecutor() as pool:
-        result = await loop.run_in_executor(pool, predict_from_bytes(bytes, debug=True, pdf=get_ext(file_.filename)=='pdf'))
-    return templates.TemplateResponse("index.html", {"request": request, "text": result})
+        result = await loop.run_in_executor(pool, predict_from_bytes(file, debug=True, pdf=get_ext(file.filename)=='pdf'))
+    return templates.TemplateResponse("index.html", {"text": result})
 
 @app.post("/upload")
-async def upload():
-    file_ = request.files["file"]
-    bytes = file_.read()
-    if not file_ or get_ext(file_.filename) not in ok_exts:
+async def upload(file: UploadFile = File(...)):
+    if not file or get_ext(file.filename) not in ok_exts:
         return {'error': True}
+    data = await file.read()
     loop = asyncio.get_event_loop()
     with concurrent.futures.ProcessPoolExecutor() as pool:
-        result = await loop.run_in_executor(pool, predict_from_bytes(bytes, pdf=get_ext(file_.filename)=='pdf'))
+        result = await loop.run_in_executor(pool, predict_from_bytes(data, pdf=get_ext(file.filename)=='pdf'))
     return result
 
 if __name__ == "__main__":
