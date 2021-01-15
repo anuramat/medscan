@@ -1,14 +1,29 @@
-from flask import Flask, Response, __version__, request, render_template, abort, jsonify
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+
 from io import BytesIO
 from PIL import Image
 import medscan
 import numpy as np
-from flask_cors import CORS, cross_origin
 import pdf2image
 
-app = Flask(__name__)
-cors = CORS(app)
-app.config['CORS_HEADERS'] = 'Content-Type'
+app = FastAPI()
+
+origins = [
+    "http://localhost.tiangolo.com",
+    "https://localhost.tiangolo.com",
+    "http://localhost",
+    "http://localhost:8080",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 ok_exts = {"png", "jpg","jpeg", "pdf"}
 get_ext = lambda x: x.split('.')[-1].lower()
@@ -29,30 +44,27 @@ def predict_from_bytes(bytes, pdf=False, debug=False):
     return medscan.predict(image_list, debug=debug)
     
 
-@app.route("/")
+@app.get("/")
 def index():
     return render_template("index.html", text=False)
 
 
-@app.route("/manual_upload", methods=["POST"])
-def manual_upload():
+@app.post("/manual_upload")
+async def manual_upload():
     file_ = request.files["file"]
     bytes = file_.read()
-    result = predict_from_bytes(bytes, debug=True, pdf=get_ext(file_.filename)=='pdf')
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ProcessPoolExecutor() as pool:
+        result = await loop.run_in_executor(pool, predict_from_bytes(bytes, debug=True, pdf=get_ext(file_.filename)=='pdf'))
     return render_template("index.html", text=result)
 
-import time
-@app.route("/slow_request", methods=["POST","GET"])
-def slow_request():
-    time.sleep(10)
-    return {'xd':'xd'} 
-
-@app.route("/upload", methods=["POST"])
-@cross_origin()
-def upload():
+@app.post("/upload")
+async def upload():
     file_ = request.files["file"]
     bytes = file_.read()
     if not file_ or get_ext(file_.filename) not in ok_exts:
         return {'error': True}
-    result = predict_from_bytes(bytes, pdf=get_ext(file_.filename)=='pdf')
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ProcessPoolExecutor() as pool:
+        result = await loop.run_in_executor(pool, predict_from_bytes(bytes, pdf=get_ext(file_.filename)=='pdf'))
     return result
