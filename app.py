@@ -13,6 +13,7 @@ from PIL import Image
 import medscan
 import numpy as np
 import pdf2image
+import time
 
 app = FastAPI()
 
@@ -62,12 +63,14 @@ async def manual_upload(file: UploadFile = File(...)):
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
+    start_time = time.time() 
     if not file or get_ext(file.filename) not in ok_exts:
         return {'error': True}
     data = await file.read()
     loop = asyncio.get_event_loop()
     with concurrent.futures.ProcessPoolExecutor() as pool:
         result = await loop.run_in_executor(pool, predict_from_bytes, data, get_ext(file.filename)=='pdf')
+    print(f'Elapsed time:{time.time()-start_time}')
     return result
 
 if __name__ == "__main__":
