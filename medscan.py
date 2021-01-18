@@ -69,22 +69,10 @@ def correct_skew(image, delta=1, limit=5, input_is_gray=False):
     return rotated
     return best_angle, rotated
 
-# TODO not even sure if works
 def prettier_text(input_text):
-    output_text = input_text
-    output_text = ' '.join([i for i in output_text.split(' ') if i]) # remove consecutive spaces
-    
-    # remove spaces near line breaks
-    output_text = list(output_text)
-    for i in range(1, len(output_text)):
-        if output_text[i] == '\n' and output_text[i-1] == ' ':
-            output_text[i-1] = '' #
-    output_text = ''.join(output_text)
-    
-    # remove consecutive line breaks
-    output_text = '\n'.join([i for i in output_text.split('\n') if i]) # remove consecutive spaces
-        
-    return output_text
+    cleaner = lambda match: '\n' if '\n' in match.group() else ' '
+    result = re.sub(r'\s+', cleaner, input_text)
+    return result
 
 def transpose_dict(input_dict):
     new_dict = {}
