@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from scipy.ndimage import interpolation as inter
 import pytesseract
-import re
+import regex as re
 from more_itertools import intersperse
 from ms_keywords import sections2kws, fields2kws # {str: [str]}
 from collections import defaultdict
@@ -71,7 +71,7 @@ def correct_skew(image, delta=1, limit=5, input_is_gray=False):
 
 def prettier_text(input_text):
     cleaner = lambda match: '\n' if '\n' in match.group() else ' '
-    result = re.sub(r'\s+', cleaner, input_text)
+    result = re.sub(r'\s+', cleaner, input_text).strip()
     return result
 
 def transpose_dict(input_dict):
@@ -82,37 +82,46 @@ def transpose_dict(input_dict):
 
 kws2sections = transpose_dict(sections2kws)
 
-def chinchoppa(text):
-     
+def find_fields(text):
+
     fields = {}
     
-    # name
-    for kw in fields2kws['name']:
-        temp = text.split(kw, 1)
-        if len(temp)==1:
-            continue
-        temp = temp[1]
-        name_match = re.search('\w', temp) 
+    # special case - name; no other fields yet, so it's tolerable
+    # later the entire function should be rewritten
+
+    name_kws = fields2kws['name']
+    name_kws = sorted(name_kws, key=len, reverse=True)
+    for kw in name_kws:
+        # first part: looks for the keyword
+        # second part: any amount of whitespace characters on either sides of three words
+        # the three words are either n uppercase characters (n>=1) or 1 uppercase character and n lowercase characters (n>=0)
+        exp = f'{kw}[\n:]*' + r'\s*((\p{Lu}+\s*){3}|(\p{Lu}\p{Ll}*\s*){3})'
+        name_match = re.search(exp, text)
         if name_match:
-            name = ' '.join(temp[name_match.start():].split(' ')[:3])
+            name = name_match.groups('')[0]
+            name = prettier_text(name)
+            name = ''.join([c if c!='\n' else ' ' for c in name])
             fields['name'] = name
             break
+    return fields
 
-    # TODO date 
- 
+def chinchoppa(text):
     sections_kws = kws2sections.keys()
     sections_kws = sorted(sections_kws, key=len, reverse=True)
     # break down text into keyword and surrounding text until we run out of keywords
-    # keep text in original order in pieces, and its type in is_kw
+    # store text in original order in "pieces" list, and its type (header/keyword) in "is_kw"
     pieces = [text]
     is_kw = [False]
     for kw in sections_kws:
         piece_idx = 0
         while piece_idx < len(pieces):
             if not is_kw[piece_idx]:
-                kw_ = kw[0].upper() + kw[1:]
-                sub_pieces = re.split(f'\n{kw_}|{kw_}[\n:]', pieces[piece_idx]) # с большой буквы, заканчивается на двоеточие
-                # remove non-alphanumeric symbols in the start of the string 
+                # TODO: test if it still works without the next line
+                # kw_ = kw[0].upper() + kw[1:]
+                # keyword is at least: prefixed with newline, postfixed with newline, or postfixed with colon
+                sub_pieces = re.split(f'\n{kw}|{kw}[\n:]', pieces[piece_idx]) 
+                # remove non-alphanumeric symbols in the start of the string
+                # TODO: test if it is useful
                 for i in range(1, len(sub_pieces)):
                     match = re.search(f'[\w]', sub_pieces[i]) 
                     if match:
@@ -125,7 +134,7 @@ def chinchoppa(text):
                 piece_idx += len(sub_pieces) 
             else:
                 piece_idx += 1
-    
+                
     # concat consecutive blocks of non header text 
     piece_idx = 1
     while piece_idx < len(pieces):
@@ -135,36 +144,30 @@ def chinchoppa(text):
             pieces.pop(piece_idx)
         else:
             piece_idx += 1
-    # now it's always ...header-nonheader-header-...
-    
-    # make sure we have in pieces n pairs of (header, text)
+    # now it's always [..., header, text, header, ...]
+
+    # make sure pieces is a list of consecutive pairs: [header, text, ..., header, text]
     if is_kw[0] == False:
-        pieces.insert(0, 'junk')
+        pieces.insert(0, 'Junk') # Sic (because of for loop in ms_keywords)
         is_kw.insert(0, True)
     if len(pieces) % 2 != 0:
         pieces.append('')
-    
+
     # finally put them in our dict 
     kw2sectiontext = {}   
     for piece_idx in range(0,len(pieces),2):
         kw2sectiontext[pieces[piece_idx]] = pieces[piece_idx+1]
-    
-    # move from keywords to internal section names
+
+    # transition from keywords to internal section names
     result = kwdict2sectiondict(kw2sectiontext)
-
     for section in result:
-        result[section] = prettier_text(result[section]) # prettify them
+        result[section] = prettier_text(result[section]) # prettify text
+
+    fields = find_fields(text)
     result.update(fields) # add fields to the result (such as name and date)
+
     return result
 
-def dict2debug(dict_,start='<br/>---',end='---<br/>'):
-    result = ''
-    for kw in dict_:
-        if kw=='junk':
-            result+=dict_['junk']
-        else:
-            result+=start+kw.upper()+end+dict_[kw]
-    return result
 
 def kwdict2sectiondict(kw2sectiontext):
     # {keyword : value} - > {section : value}
@@ -177,11 +180,8 @@ def kwdict2sectiondict(kw2sectiontext):
 preprocessing_functions = [get_grayscale,         correct_skew,]
 apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
 
-def predict(input_image_list, debug=False):
+def predict(input_image_list):
     preprocessed_images = [apply_preprocessing(img) for img in input_image_list]
     raw_text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng',) for img in preprocessed_images])
     result = chinchoppa(raw_text)
-    if debug:
-        return dict2debug(result)
-    else:
-        return result
+    return result
