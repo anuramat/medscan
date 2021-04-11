@@ -31,9 +31,6 @@ get_ext = lambda x: x.split('.')[-1].lower()
 #TODO remove copy?
 def pil2cv(image):
     temp = np.asarray(image)
-    ## saving image for debug
-    #with open('array', 'wb') as file:
-    #    np.save(file, temp)
     return temp[:, :, ::-1].copy()
 
 def predict_from_bytes(data, pdf=False):
