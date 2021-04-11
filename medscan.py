@@ -182,6 +182,6 @@ apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), prep
 
 def predict(input_image_list):
     preprocessed_images = [apply_preprocessing(img) for img in input_image_list]
-    raw_text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng',) for img in preprocessed_images])
+    raw_text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng', config='--oem 1') for img in preprocessed_images])
     result = chinchoppa(raw_text)
     return result
