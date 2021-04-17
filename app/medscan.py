@@ -9,36 +9,8 @@ from ms_keywords import sections2kws, fields2kws # {str: [str]}
 from collections import defaultdict
 from functools import reduce
 
-# get grayscale image
 def get_grayscale(image):
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-# noise removal
-def remove_noise(image):
-    return cv2.medianBlur(image,5)
- 
-#thresholding
-def thresholding(image):
-    return cv2.threshold(image, 0, 255, cv2.THRESH_TOZERO + cv2.THRESH_OTSU)[1] # was THRESH_BINARY INITIALLY
-    
-#dilation
-def dilate(image):
-    kernel = np.ones((5,5),np.uint8)
-    return cv2.dilate(image, kernel, iterations = 1)
-    
-#erosion
-def erode(image):
-    kernel = np.ones((5,5),np.uint8)
-    return cv2.erode(image, kernel, iterations = 1)
-
-#opening - erosion followed by dilation
-def opening(image):
-    kernel = np.ones((3,3),np.uint8)
-    return cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
-
-#canny edge detection
-def canny(image):
-    return cv2.Canny(image, 100, 200)
 
 def correct_skew(image, delta=1, limit=5, input_is_gray=False):
     def determine_score(arr, angle):
@@ -177,7 +149,7 @@ def kwdict2sectiondict(kw2sectiontext):
         sectiondict[section] += kw2sectiontext[kw] + '\n'
     return sectiondict
  
-preprocessing_functions = [get_grayscale,         correct_skew,]
+preprocessing_functions = [get_grayscale, correct_skew,]
 apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
 
 def predict(input_image_list):
