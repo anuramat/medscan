@@ -1,7 +1,9 @@
 # base
 FROM ubuntu:18.04
-# install curl
-RUN apt update &&  apt install -y curl
+# install stuff 
+RUN apt update && apt install -y curl libgl1-mesa-glx software-properties-common
+RUN add-apt-repository ppa:alex-p/tesseract-ocr-devel
+RUN apt update && apt install -y curl tesseract-ocr tesseract-ocr-rus 
 # install miniconda
 RUN curl -LO http://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
 RUN bash Miniconda3-latest-Linux-x86_64.sh -p /miniconda -b
@@ -13,8 +15,6 @@ WORKDIR /app
 # create environment
 RUN conda update -n base -c defaults conda
 RUN conda env create --file=frozen_env.yml
-# install dependency for opencv
-RUN apt install -y libgl1-mesa-glx
 # "activate" environment 
 SHELL ["conda", "run", "-n", "medscan", "/bin/bash", "-c"]
 # open port
