@@ -1,6 +1,3 @@
-# medscan
-### how to install:
-1. docker build -t medscan .
-2. docker container rm medscan # if already exists
-3. docker create -p 5000:5000 --name medscan medscan
-4. docker start medscan
+# MEDSCAN
+start.sh - cleans previous containers, rebuilds the image and starts the new container
+dev.sh - allows dev to interactively work with mounted app folder in the container that is deleted upon exit
