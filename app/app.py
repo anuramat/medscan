@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import concurrent
@@ -26,6 +26,7 @@ app.add_middleware(
 )
 
 ok_exts = {"png", "jpg","jpeg", "pdf"}
+doc_types = {"snils", "discharge", "insurance"}
 get_ext = lambda x: x.split('.')[-1].lower()
 
 #TODO remove copy?
@@ -33,29 +34,28 @@ def pil2cv(image):
     temp = np.asarray(image)
     return temp[:, :, ::-1].copy()
 
-def predict_from_bytes(data, pdf=False):
+def predict_from_bytes(data, doc_type, pdf=False):
     if pdf:
         image_list = pdf2image.convert_from_bytes(data)
     else:
         image_list = [Image.open(BytesIO(data))]
-    
 
     image_list = [pil2cv(ImageOps.exif_transpose(img.convert('RGB'))) for img in image_list]
     if verbosity>=1:
         print(f'{len(image_list)} pages')
-    return medscan.predict(image_list)
+    return medscan.text_recognition(image_list, doc_type)
 
 @app.post("/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(file = File(...), doc_type = 'discharge'):
     if verbosity>=1:
         print('Upload incoming')
     start_time = time.time() 
-    if not file or get_ext(file.filename) not in ok_exts:
+    if get_ext(file.filename) not in ok_exts or doc_type not in doc_types:
         return {'error': True}
     data = await file.read()
     loop = asyncio.get_event_loop()
     with concurrent.futures.ProcessPoolExecutor() as pool:
-        result = await loop.run_in_executor(pool, predict_from_bytes, data, get_ext(file.filename)=='pdf')
+        result = await loop.run_in_executor(pool, predict_from_bytes, data, doc_type, get_ext(file.filename)=='pdf')
     if verbosity>=1:
         print(f'Elapsed time:{time.time()-start_time}')
     return result

@@ -16,7 +16,8 @@ WORKDIR /app
 RUN conda update -n base -c defaults conda
 RUN conda env create --file=frozen_env.yml
 # "activate" environment 
-SHELL ["conda", "run", "-n", "medscan", "/bin/bash", "-c"]
+#SHELL ["conda", "run", "-n", "medscan", "/bin/bash", "-c"]
+ENV PATH="/miniconda/envs/medscan/bin:/miniconda/condabin::${PATH}"
 # open port
 EXPOSE 5000
 # start application

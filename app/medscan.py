@@ -77,7 +77,7 @@ def find_fields(text):
             break
     return fields
 
-def chinchoppa(text):
+def process_discharge(text):
     sections_kws = kws2sections.keys()
     sections_kws = sorted(sections_kws, key=len, reverse=True)
     # break down text into keyword and surrounding text until we run out of keywords
@@ -148,12 +148,24 @@ def kwdict2sectiondict(kw2sectiontext):
         section = kws2sections[kw]
         sectiondict[section] += kw2sectiontext[kw] + '\n'
     return sectiondict
+
+
+def process_insurance(text):
+    text = ''.join(text.split())
+    match = re.search(r'\d{16}', text)
+    if match:
+        return {'insurance': match.group()}
+    else:
+        return dict()
  
 preprocessing_functions = [get_grayscale, correct_skew,]
 apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
 
-def predict(input_image_list):
-    preprocessed_images = [apply_preprocessing(img) for img in input_image_list]
-    raw_text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng', config='--oem 1') for img in preprocessed_images])
-    result = chinchoppa(raw_text)
-    return result
+def text_recognition(input_images, doc_type):
+    preprocessed_images = [apply_preprocessing(img) for img in input_images]
+    text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng', config='--oem 1') for img in preprocessed_images])
+     
+    if doc_type == 'discharge':
+        return process_discharge(text)
+    elif doc_type == 'insurance':
+        return process_insurance(text)
