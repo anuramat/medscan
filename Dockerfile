@@ -20,4 +20,4 @@ SHELL ["conda", "run", "-n", "medscan", "/bin/bash", "-c"]
 # open port
 EXPOSE 5000
 # start application
-CMD uvicorn app:app --host 0.0.0.0 --port 5000 
+CMD uvicorn app:app --host 0.0.0.0 --port 5000 --reload
