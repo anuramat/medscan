@@ -12,6 +12,9 @@ from functools import reduce
 def get_grayscale(image):
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
+def thresholding(image):
+    return cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
 def correct_skew(image, delta=1, limit=5, input_is_gray=False):
     def determine_score(arr, angle):
         data = inter.rotate(arr, angle, reshape=False, order=0)
@@ -151,21 +154,39 @@ def kwdict2sectiondict(kw2sectiontext):
 
 
 def process_insurance(text):
-    text = ''.join(text.split())
+    # checksum? not found? more than one?
+    text = re.sub(r"[ \t.,`']", '', text)
+    print(text)
     match = re.search(r'\d{16}', text)
     if match:
         return {'insurance': match.group()}
     else:
         return dict()
- 
+
+def process_snils(text):
+    # checksum? not found? more than one?
+    text = re.sub(r"[ \t.,`']", '', text)
+    print(text)
+    match = re.search(r'\d{3}-\d{3}-\d{5}', text)
+    if match:
+        return {'snils': match.group()}
+    else:
+        return dict()
+
 preprocessing_functions = [get_grayscale, correct_skew,]
 apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
 
 def text_recognition(input_images, doc_type):
+    preprocessing_functions = [get_grayscale, correct_skew]
+    if doc_type != 'discharge':
+        preprocessing_functions.insert(1, thresholding)
+    apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
     preprocessed_images = [apply_preprocessing(img) for img in input_images]
     text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng', config='--oem 1') for img in preprocessed_images])
-     
+    # ugly  
     if doc_type == 'discharge':
         return process_discharge(text)
     elif doc_type == 'insurance':
         return process_insurance(text)
+    elif doc_type == 'snils':
+        return process_snils(text)

@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 templates = Jinja2Templates(directory='templates')
 
-verbosity = 1
+verbosity = 2
 
 app = FastAPI()
 
@@ -51,9 +51,9 @@ def predict_from_bytes(data, doc_type, pdf=False):
     return medscan.text_recognition(image_list, doc_type)
 
 @app.post("/upload")
-async def upload(file = File(...), doc_type = 'discharge'):
+async def upload(file = File(...), doc_type = Form(...)):
     if verbosity>=1:
-        print('Upload incoming'
+        print('Upload incoming, document type', doc_type)
     start_time = time.time() 
     if get_ext(file.filename) not in ok_exts or doc_type not in doc_types:
         return {'error': True}
@@ -68,6 +68,7 @@ async def upload(file = File(...), doc_type = 'discharge'):
 # temp
 @app.get("/", response_class = HTMLResponse)
 async def index(request: Request):
+    print(request)
     return templates.TemplateResponse("index.html", {'request': request, 'text': ''})
 
 if __name__ == "__main__":
