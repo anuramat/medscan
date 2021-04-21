@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<link rel="stylesheet" href="/css/style.css" />
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>testbench</title>
+</head>
+
+<body>
+    <h2>testbench</h2>
+    <p>.png/.jpg</p>
+
+    <form action="/upload" method=post enctype=multipart/form-data> <p><input type=file name=file>
+        <input type=submit value=Upload>
+    </form>
+    <label for="doc_type">tip dokumenta</label> 
+    <select name="doc_type" id="doc_type" form="file">
+        <option value="">vypiska</option>
+        <option value="">snils</option>
+        <option value="">strahovka</option>
+    </select>
+    {% if text %}
+    {% autoescape false %}
+    <p>{{text}}</p>
+    {% endautoescape %}
+    {% endif %}
+</body>
+
+</html>
+
+
+

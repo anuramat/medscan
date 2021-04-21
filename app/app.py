@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, UploadFile, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import concurrent
@@ -8,6 +8,11 @@ import medscan
 import numpy as np
 import pdf2image
 import time
+
+# temp 
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+templates = Jinja2Templates(directory='templates')
 
 verbosity = 1
 
@@ -48,7 +53,7 @@ def predict_from_bytes(data, doc_type, pdf=False):
 @app.post("/upload")
 async def upload(file = File(...), doc_type = 'discharge'):
     if verbosity>=1:
-        print('Upload incoming')
+        print('Upload incoming'
     start_time = time.time() 
     if get_ext(file.filename) not in ok_exts or doc_type not in doc_types:
         return {'error': True}
@@ -59,6 +64,11 @@ async def upload(file = File(...), doc_type = 'discharge'):
     if verbosity>=1:
         print(f'Elapsed time:{time.time()-start_time}')
     return result
+
+# temp
+@app.get("/", response_class = HTMLResponse)
+async def index(request: Request):
+    return templates.TemplateResponse("index.html", {'request': request, 'text': ''})
 
 if __name__ == "__main__":
     uvicorn.run("app:app")
