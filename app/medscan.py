@@ -178,8 +178,8 @@ apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), prep
 
 def text_recognition(input_images, doc_type):
     preprocessing_functions = [get_grayscale, correct_skew]
-    if doc_type != 'discharge':
-        preprocessing_functions.insert(1, thresholding)
+    #if doc_type != 'discharge':
+        #preprocessing_functions.insert(1, thresholding)
     apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
     preprocessed_images = [apply_preprocessing(img) for img in input_images]
     text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng', config='--oem 1') for img in preprocessed_images])

@@ -51,10 +51,10 @@ def predict_from_bytes(data, doc_type, pdf=False):
     return medscan.text_recognition(image_list, doc_type)
 
 @app.post("/upload")
-async def upload(file = File(...), doc_type = Form(...)):
+async def upload(file = File(...), doc_type = Form(default='discharge')):
     if verbosity>=1:
         print('Upload incoming, document type', doc_type)
-    start_time = time.time() 
+    start_time = time.time()
     if get_ext(file.filename) not in ok_exts or doc_type not in doc_types:
         return {'error': True}
     data = await file.read()
