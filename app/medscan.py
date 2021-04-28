@@ -8,6 +8,8 @@ from more_itertools import intersperse
 from ms_keywords import sections2kws, fields2kws # {str: [str]}
 from collections import defaultdict
 from functools import reduce
+import skimage
+from skimage.exposure import equalize_adapthist
 
 def get_grayscale(image):
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -152,38 +154,37 @@ def kwdict2sectiondict(kw2sectiontext):
         sectiondict[section] += kw2sectiontext[kw] + '\n'
     return sectiondict
 
-
+# checksum? more than one? raise error TODO also in insurance iterate over matches to see if one of them checks out
+# make sure that symbols on either side of the numbers are not numbers (add to the regexp) TODO
+noise = '''."'`,\u00B0'''
 def process_insurance(text):
-    # checksum? not found? more than one?
-    text = re.sub(r"[ \t.,`']", '', text)
-    print(text)
-    match = re.search(r'\d{16}', text)
+    text = re.sub(f'[ \t{noise}]', '', text) # maybe remove some of these later TODO
+    match = re.search(r'(\D|^)\d{16}(\D|$)', text)
     if match:
         return {'insurance': match.group()}
-    else:
-        return dict()
+    return {'error':'not found', 'text' : text}
 
 def process_snils(text):
-    # checksum? not found? more than one?
-    text = re.sub(r"[ \t.,`']", '', text)
-    print(text)
-    match = re.search(r'\d{3}-\d{3}-\d{5}', text)
+    text = re.sub(f'[ \t{noise}]', '', text)
+    match = re.search(r'\d{3}-\d{3}-(\d{5}|\d{3}-\d{2})', text)
     if match:
-        return {'snils': match.group()}
-    else:
-        return dict()
+        return {'snils': match.group().replace('-','')}
+    return {'error':'not found', 'text' : text}
 
 preprocessing_functions = [get_grayscale, correct_skew,]
 apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
 
+def preprocess_image(img):
+    img = get_grayscale(img)
+    img = correct_skew(img)
+    img = skimage.util.img_as_ubyte(equalize_adapthist(img, nbins = 2))
+    cv2.imwrite("files/lastupload.png", img) 
+    return img
+
 def text_recognition(input_images, doc_type):
-    preprocessing_functions = [get_grayscale, correct_skew]
-    #if doc_type != 'discharge':
-        #preprocessing_functions.insert(1, thresholding)
-    apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
-    preprocessed_images = [apply_preprocessing(img) for img in input_images]
+    preprocessed_images = [preprocess_image(img) for img in input_images]
     text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng', config='--oem 1') for img in preprocessed_images])
-    # ugly  
+
     if doc_type == 'discharge':
         return process_discharge(text)
     elif doc_type == 'insurance':
