@@ -181,10 +181,115 @@ def preprocess_image(img):
     cv2.imwrite("files/lastupload.png", img) 
     return img
 
+def mrz_checksum(value):
+    weights = [7,3,1]
+    total = 0
+    for i in range(len(value)):
+        if value[i] == '<':
+            continue
+        total += int(value[i]) * weights[i%3]
+    return str(total%10)
+eng_alphabet = 'ABVGDE2JZIQKLMNOPRSTUFHC34WXY9678'
+rus_alphabet = 'АБВГДЕЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'
+mrz_dict = {eng_alphabet[i]: rus_alphabet[i] for i in range(len(eng_alphabet))}
+def process_passport(img):
+    height = 600
+    ratio = img.shape[1]/img.shape[0] # width/height
+    width = int(ratio*height)
+    dim = (width, height)
+
+    # resize image, because we have fixed size kernels
+    img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+    img = get_grayscale(img)
+    img = correct_skew(img)
+    img = adapthist(img)
+
+    input_img = img.copy()
+
+    rectKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 5))
+    sqKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 21))
+    img = cv2.GaussianBlur(img, (3, 3), 0)
+    img = cv2.morphologyEx(img, cv2.MORPH_BLACKHAT, rectKernel)
+
+    img = cv2.Sobel(img, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
+    img = np.absolute(img)
+    (minVal, maxVal) = (np.min(img), np.max(img))
+    img = (255 * ((img - minVal) / (maxVal - minVal))).astype("uint8")
+
+    img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, rectKernel)
+    img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
+    img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, sqKernel)
+    img = cv2.erode(img, None, iterations=4)
+
+    cnts = cv2.findContours(img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
+    cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
+
+    mrz_img = None
+    for c in cnts:
+        
+        (x, y, w, h) = cv2.boundingRect(c)
+        ar = w / float(h)
+        crWidth = w / width
+        # check to see if the aspect ratio and coverage width are within
+        # acceptable criteria
+        if ar > 5 and crWidth > 0.75:
+            # pad the bounding box since we applied erosions and now need
+            # to re-grow it
+            pX = int((x + w) * 0.03)
+            pY = int((y + h) * 0.03)
+            (x, y) = (x - pX, y - pY)
+            (w, h) = (w + (pX * 2), h + (pY * 2))
+            # extract the ROI from the image
+            mrz_img = input_img[y:y + h, x:x + w].copy()
+            break
+    if mrz_img == None:
+        return {'error', 'MRZ was not found'}
+    cv2.imwrite("files/lastupload.png", mrz_img) 
+    mrz = pytesseract.image_to_string(mrz_img, lang='eng', config='--oem 1')
+    mrz = re.sub('[^\w\d<]', '', text)
+
+    if len(mrz) != 88:
+        return {'error': 'Wrong length of MRZ'}
+    result = {}
+    
+    name = ''
+    for i in ' '.join(mrz[5:44].split('<')):
+        if i in eng_alphabet:
+            name += mrz_dict[i]
+        else:
+            name += ' '
+    name = re.sub('[ ]+',' ',name).rstrip()
+    result['name'] = name
+    
+    mrz = mrz[44:]
+    reverse_date = lambda x: x[4:] + x[2:4] + x[:2]
+    
+    result['id_series'] = mrz[:3] + mrz[28]
+    result['id_no'] = mrz[3:9]
+    result['corr_1'] = mrz_checksum(mrz[:9]) == mrz[9]
+    result['dob'] = reverse_date(mrz[13:19])
+    result['corr_2'] = mrz_checksum(mrz[13:19]) == mrz[19]
+    result['sex'] = mrz[20]
+    result['issued'] = reverse_date(mrz[29:35])
+    result['authority_code'] = mrz[35:41]
+    result['corr_3'] = mrz_checksum(mrz[28:41]) == mrz[42]
+    result['corr_final'] = mrz_checksum(mrz[:10]+mrz[13:20]+mrz[21:28]+mrz[28:43]) == mrz[43]
+    
+    
+    return result
+
+
+    
+
 def text_recognition(input_images, doc_type):
+    if doc_type == 'passport':
+        return process_passport(input_images[0])
+    
     preprocessed_images = [preprocess_image(img) for img in input_images]
     text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng', config='--oem 1') for img in preprocessed_images])
 
+    # batches of insurances don't make much sense
+    # TODO hide everything inside "process" functions (preprocessing and tesseract calls)
     if doc_type == 'discharge':
         return process_discharge(text)
     elif doc_type == 'insurance':
