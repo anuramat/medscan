@@ -31,7 +31,7 @@ app.add_middleware(
 )
 
 ok_exts = {"png", "jpg","jpeg", "pdf"}
-doc_types = {"snils", "discharge", "insurance"}
+doc_types = {"snils", "discharge", "insurance", "passport"}
 get_ext = lambda x: x.split('.')[-1].lower()
 
 #TODO remove copy?
@@ -59,8 +59,9 @@ async def upload(file = File(...), doc_type = Form(default='discharge')):
         return {'error': True}
     data = await file.read()
     loop = asyncio.get_event_loop()
-    with concurrent.futures.ProcessPoolExecutor() as pool:
-        result = await loop.run_in_executor(pool, predict_from_bytes, data, doc_type, get_ext(file.filename)=='pdf')
+    result = predict_from_bytes(data, doc_type, get_ext(file.filename)=='pdf')
+    #with concurrent.futures.ProcessPoolExecutor() as pool:
+    #    result = await loop.run_in_executor(pool, predict_from_bytes, data, doc_type, get_ext(file.filename)=='pdf')
     if verbosity>=1:
         print(f'Elapsed time:{time.time()-start_time}')
     return result

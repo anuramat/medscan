@@ -10,6 +10,7 @@ from collections import defaultdict
 from functools import reduce
 import skimage
 from skimage.exposure import equalize_adapthist
+from skimage.filters import sobel_v
 
 def get_grayscale(image):
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -187,6 +188,8 @@ def mrz_checksum(value):
     for i in range(len(value)):
         if value[i] == '<':
             continue
+        if not value[i].isdigit():
+            return 'error' 
         total += int(value[i]) * weights[i%3]
     return str(total%10)
 eng_alphabet = 'ABVGDE2JZIQKLMNOPRSTUFHC34WXY9678'
@@ -197,20 +200,15 @@ def process_passport(img):
     ratio = img.shape[1]/img.shape[0] # width/height
     width = int(ratio*height)
     dim = (width, height)
-
     # resize image, because we have fixed size kernels
     img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
     img = get_grayscale(img)
     img = correct_skew(img)
-    img = adapthist(img)
-
     input_img = img.copy()
-
     rectKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 5))
     sqKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 21))
     img = cv2.GaussianBlur(img, (3, 3), 0)
     img = cv2.morphologyEx(img, cv2.MORPH_BLACKHAT, rectKernel)
-
     img = cv2.Sobel(img, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
     img = np.absolute(img)
     (minVal, maxVal) = (np.min(img), np.max(img))
@@ -221,12 +219,12 @@ def process_passport(img):
     img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, sqKernel)
     img = cv2.erode(img, None, iterations=4)
 
+    cv2.imwrite("files/lastupload.png", img) 
     cnts = cv2.findContours(img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
 
     mrz_img = None
     for c in cnts:
-        
         (x, y, w, h) = cv2.boundingRect(c)
         ar = w / float(h)
         crWidth = w / width
@@ -242,11 +240,11 @@ def process_passport(img):
             # extract the ROI from the image
             mrz_img = input_img[y:y + h, x:x + w].copy()
             break
-    if mrz_img == None:
-        return {'error', 'MRZ was not found'}
+    if type(mrz_img) is not np.ndarray or np.prod(mrz_img.shape) == 0:
+        return {'error': 'MRZ was not found'}
     cv2.imwrite("files/lastupload.png", mrz_img) 
     mrz = pytesseract.image_to_string(mrz_img, lang='eng', config='--oem 1')
-    mrz = re.sub('[^\w\d<]', '', text)
+    mrz = re.sub('[^\w\d<]', '', mrz)
 
     if len(mrz) != 88:
         return {'error': 'Wrong length of MRZ'}
