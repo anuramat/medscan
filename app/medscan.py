@@ -10,7 +10,15 @@ from collections import defaultdict
 from functools import reduce
 import skimage
 from skimage.exposure import equalize_adapthist
-from skimage.filters import sobel_v
+import matplotlib.pyplot as plt
+from skimage.morphology import binary_erosion, binary_opening, binary_closing, binary_dilation
+from skimage.filters import threshold_otsu, unsharp_mask
+from skimage.io import imsave
+from scipy.ndimage.filters import median_filter
+
+# TODO move
+debug = True
+debug_folder = 'files/'
 
 def get_grayscale(image):
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -83,7 +91,19 @@ def find_fields(text):
             break
     return fields
 
-def process_discharge(text):
+def wrapped_ocr(img, lang=None, whitelist=None):
+    if not lang:
+        lang = 'rus+eng'
+    config = '--oem 1 --psm 1'
+    if whitelist:
+        config += ' -c tessedit_char_whitelist=' + whitelist
+    text = pytesseract.image_to_string(img, lang=lang, config=config)
+    return text
+
+def process_discharge(input_images):
+    preprocessed_images = [preprocess_image(img, 256) for img in input_images]
+    text = ' '.join([wrapped_ocr(img) for img in preprocessed_images])
+
     sections_kws = kws2sections.keys()
     sections_kws = sorted(sections_kws, key=len, reverse=True)
     # break down text into keyword and surrounding text until we run out of keywords
@@ -158,28 +178,56 @@ def kwdict2sectiondict(kw2sectiontext):
 # checksum? more than one? raise error TODO also in insurance iterate over matches to see if one of them checks out
 # make sure that symbols on either side of the numbers are not numbers (add to the regexp) TODO
 noise = '''."'`,\u00B0'''
-def process_insurance(text):
-    text = re.sub(f'[ \t{noise}]', '', text) # maybe remove some of these later TODO
+def process_insurance(img):
+    img = preprocess_image(img, 5)
+    text = wrapped_ocr(img, lang='rus', whitelist='1234567890')
     match = re.search(r'(\D|^)\d{16}(\D|$)', text)
     if match:
         return {'insurance': match.group()}
+    if debug:
+        add_fail(text) 
     return {'error':'not found', 'text' : text}
 
-def process_snils(text):
-    text = re.sub(f'[ \t{noise}]', '', text)
-    match = re.search(r'\d{3}-\d{3}-(\d{5}|\d{3}-\d{2})', text)
-    if match:
-        return {'snils': match.group().replace('-','')}
-    return {'error':'not found', 'text' : text}
-
-preprocessing_functions = [get_grayscale, correct_skew,]
-apply_preprocessing = lambda input_img: reduce(lambda img, func: func(img), preprocessing_functions, input_img)
-
-def preprocess_image(img):
+def process_snils(img):
     img = get_grayscale(img)
     img = correct_skew(img)
-    img = skimage.util.img_as_ubyte(equalize_adapthist(img, nbins = 2))
-    cv2.imwrite("files/lastupload.png", img) 
+    initial_img = img.copy() 
+    img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=None,nbins=16))
+    img = skimage.morphology.opening(img, skimage.morphology.disk(3))
+    img = skimage.util.img_as_ubyte(unsharp_mask(img, 10, 3))
+    img = skimage.morphology.erosion(img, skimage.morphology.disk(3))
+    if debug:
+        imsave(debug_folder + '/lastupload.png', img)
+    text = wrapped_ocr(img, lang='rus', whitelist='1234567890-')
+    match = re.search(r'\d{3}-+\d{3}-+(\d{5}|\d{3}-+\d{2})', text)
+    if match:
+        return {'snils': re.sub(r'\D', '', match.group())}
+
+    
+    # case with thick font
+    img = initial_img
+    img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=None,nbins=16))
+    img = skimage.morphology.opening(img, skimage.morphology.disk(2))
+    img = skimage.util.img_as_ubyte(unsharp_mask(img, 5, 2))
+    if debug:
+        imsave(debug_folder + '/lastupload2.png', img)
+    text = wrapped_ocr(img, lang='rus', whitelist='1234567890-')
+    match = re.search(r'\d{3}-+\d{3}-+(\d{5}|\d{3}-+\d{2})', text)
+    if match:
+        return {'snils': re.sub(r'\D', '', match.group())}
+
+
+    # case of failure
+    if debug:
+        add_fail(text) 
+    return {'error':'not found', 'text' : text}
+
+def preprocess_image(img, nbins=256, kernel_size=None):
+    img = get_grayscale(img)
+    img = correct_skew(img)
+    img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=kernel_size,nbins=nbins))
+    if debug:
+        cv2.imwrite(debug_folder + "/lastupload.png", img) 
     return img
 
 def mrz_checksum(value):
@@ -219,7 +267,7 @@ def process_passport(img):
     img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, sqKernel)
     img = cv2.erode(img, None, iterations=4)
 
-    cv2.imwrite("files/lastupload.png", img) 
+    cv2.imwrite(debug_folder + "/lastupload.png", img) 
     cnts = cv2.findContours(img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
 
@@ -242,10 +290,11 @@ def process_passport(img):
             break
     if type(mrz_img) is not np.ndarray or np.prod(mrz_img.shape) == 0:
         return {'error': 'MRZ was not found'}
-    cv2.imwrite("files/lastupload.png", mrz_img) 
+    cv2.imwrite(debug_folder + "/lastupload.png", mrz_img) 
     mrz = pytesseract.image_to_string(mrz_img, lang='eng', config='--oem 1')
     mrz = re.sub('[^\w\d<]', '', mrz)
-
+    if debug:
+        add_fail(text)
     if len(mrz) != 88:
         return {'error': 'Wrong length of MRZ'}
     result = {}
@@ -282,15 +331,15 @@ def process_passport(img):
 def text_recognition(input_images, doc_type):
     if doc_type == 'passport':
         return process_passport(input_images[0])
-    
-    preprocessed_images = [preprocess_image(img) for img in input_images]
-    text = ' '.join([pytesseract.image_to_string(img, lang='rus+eng', config='--oem 1') for img in preprocessed_images])
-
-    # batches of insurances don't make much sense
-    # TODO hide everything inside "process" functions (preprocessing and tesseract calls)
-    if doc_type == 'discharge':
-        return process_discharge(text)
+    elif doc_type == 'discharge':
+        return process_discharge(input_images)
     elif doc_type == 'insurance':
-        return process_insurance(text)
+        return process_insurance(input_images[0])
     elif doc_type == 'snils':
-        return process_snils(text)
+        return process_snils(input_images[0])
+
+def add_fail(text):
+    # parameterize the folder TODO
+    res = '\n\n\n****upload start****\n\n\n' + text + '\n\n\n****upload end\n\n\n'
+    with open(debug_folder + '/fails.txt', 'a+') as textfile:
+        textfile.write(res) 
