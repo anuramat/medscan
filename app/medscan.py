@@ -12,10 +12,13 @@ import skimage
 from skimage.exposure import equalize_adapthist
 import matplotlib.pyplot as plt
 from skimage.morphology import binary_erosion, binary_opening, binary_closing, binary_dilation
-from skimage.filters import threshold_otsu, unsharp_mask
+from skimage.filters import threshold_otsu, unsharp_mask, median, gaussian
 from skimage.io import imsave
-from scipy.ndimage.filters import median_filter
 from skimage.restoration import denoise_bilateral, denoise_wavelet
+from skimage.morphology import dilation, erosion, opening, closing
+from skimage.morphology import disk
+
+from skimage.util import compare_images
 
 # TODO move
 debug = True
@@ -241,15 +244,15 @@ eng_alphabet = 'ABVGDE2JZIQKLMNOPRSTUFHC34WXY9678'
 rus_alphabet = 'АБВГДЕЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'
 mrz_dict = {eng_alphabet[i]: rus_alphabet[i] for i in range(len(eng_alphabet))}
 def process_passport(img):
+    img = get_grayscale(img)
+    img = correct_skew(img)
+    input_img = img.copy() 
     height = 600
     ratio = img.shape[1]/img.shape[0] # width/height
     width = int(ratio*height)
     dim = (width, height)
     # resize image, because we have fixed size kernels
     img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
-    img = get_grayscale(img)
-    img = correct_skew(img)
-    input_img = img.copy()
     rectKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 5))
     sqKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 21))
     img = cv2.GaussianBlur(img, (3, 3), 0)
@@ -282,31 +285,53 @@ def process_passport(img):
             (x, y) = (x - pX, y - pY)
             (w, h) = (w + (pX * 2), h + (pY * 2))
             # extract the ROI from the image
+            factor = input_img.shape[0]/height
+            y = int(y*factor)
+            x = int(x*factor)
+            h = int(h*factor)
+            w = int(w*factor)
             mrz_img = input_img[y:y + h, x:x + w].copy()
             break
     if type(mrz_img) is not np.ndarray or np.prod(mrz_img.shape) == 0:
         return {'error': 'MRZ was not found'}
     img = mrz_img.copy()
 
-    # OCR STARTS HERE
     if debug:
         cv2.imwrite(debug_folder + "/lastupload.png", input_img) 
     whitelist = '<ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'
-    img = skimage.util.img_as_ubyte(unsharp_mask(img, 5, 2))
-     
-    #
+    # OCR STARTS HERE
+    input_img = img.copy()
+    img = dilation(img)
+    img = median(img, np.ones((10,10)))
+    img = 1-compare_images(img,input_img, method='diff')
+
+    img = skimage.util.img_as_ubyte(img)
+    # OCR END
     
     if debug:
         cv2.imwrite(debug_folder + "/lastupload2.png", img) 
     mrz = wrapped_ocr(img, lang='eng', whitelist=whitelist)
-     
-    # mrz = re.sub('[^\w\d<]', '', mrz)
-    if debug:
-        add_fail(mrz)
-    if len(mrz) != 88:
-        return {'error': 'Wrong length of MRZ', 'text':mrz}
-    result = {}
     
+    mrz = mrz.strip() 
+    mrz_lines = mrz.split('\n')
+     
+    if len(mrz_lines) != 2 or len(mrz) < 60:
+        return {'error': 'xd', 'text': mrz}
+    
+    for i in range(2):
+        mrz_lines[i] = mrz_lines[i].ljust(44, '<')[:44]
+        
+    mrz = ''.join(mrz_lines)
+
+
+
+
+    # MRZ parser
+    # TODO: make robust in terms of scanos 
+    # TODO: add check: if len(mrz)==88(+1)
+    result = {}
+    if debug:
+        result['mrz_line'] = mrz_lines
     name = ''
     for i in ' '.join(mrz[5:44].split('<')):
         if i in eng_alphabet:
