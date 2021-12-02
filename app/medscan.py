@@ -15,6 +15,7 @@ from skimage.morphology import binary_erosion, binary_opening, binary_closing, b
 from skimage.filters import threshold_otsu, unsharp_mask
 from skimage.io import imsave
 from scipy.ndimage.filters import median_filter
+from skimage.restoration import denoise_bilateral, denoise_wavelet
 
 # TODO move
 debug = True
@@ -179,16 +180,20 @@ def kwdict2sectiondict(kw2sectiontext):
 # make sure that symbols on either side of the numbers are not numbers (add to the regexp) TODO
 noise = '''."'`,\u00B0'''
 def process_insurance(img):
-    img = preprocess_image(img, 5)
+    img = get_grayscale(img)
+    img = correct_skew(img)
+    
     text = wrapped_ocr(img, lang='rus', whitelist='1234567890')
     match = re.search(r'(\D|^)\d{16}(\D|$)', text)
-    if match:
-        return {'insurance': match.group()}
     if debug:
+        imsave(debug_folder + '/lastupload.png', img)
         add_fail(text) 
+    if match:
+        return {'insurance': match.group().strip()}
     return {'error':'not found', 'text' : text}
 
 def process_snils(img):
+    # fine font
     img = get_grayscale(img)
     img = correct_skew(img)
     initial_img = img.copy() 
@@ -204,7 +209,7 @@ def process_snils(img):
         return {'snils': re.sub(r'\D', '', match.group())}
 
     
-    # case with thick font
+    # thicc font 
     img = initial_img
     img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=None,nbins=16))
     img = skimage.morphology.opening(img, skimage.morphology.disk(2))
@@ -217,18 +222,10 @@ def process_snils(img):
         return {'snils': re.sub(r'\D', '', match.group())}
 
 
-    # case of failure
+    # fail
     if debug:
         add_fail(text) 
     return {'error':'not found', 'text' : text}
-
-def preprocess_image(img, nbins=256, kernel_size=None):
-    img = get_grayscale(img)
-    img = correct_skew(img)
-    img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=kernel_size,nbins=nbins))
-    if debug:
-        cv2.imwrite(debug_folder + "/lastupload.png", img) 
-    return img
 
 def mrz_checksum(value):
     weights = [7,3,1]
@@ -267,7 +264,6 @@ def process_passport(img):
     img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, sqKernel)
     img = cv2.erode(img, None, iterations=4)
 
-    cv2.imwrite(debug_folder + "/lastupload.png", img) 
     cnts = cv2.findContours(img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
 
@@ -290,13 +286,25 @@ def process_passport(img):
             break
     if type(mrz_img) is not np.ndarray or np.prod(mrz_img.shape) == 0:
         return {'error': 'MRZ was not found'}
-    cv2.imwrite(debug_folder + "/lastupload.png", mrz_img) 
-    mrz = pytesseract.image_to_string(mrz_img, lang='eng', config='--oem 1')
-    mrz = re.sub('[^\w\d<]', '', mrz)
+    img = mrz_img.copy()
+
+    # OCR STARTS HERE
     if debug:
-        add_fail(text)
+        cv2.imwrite(debug_folder + "/lastupload.png", input_img) 
+    whitelist = '<ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'
+    img = skimage.util.img_as_ubyte(unsharp_mask(img, 5, 2))
+     
+    #
+    
+    if debug:
+        cv2.imwrite(debug_folder + "/lastupload2.png", img) 
+    mrz = wrapped_ocr(img, lang='eng', whitelist=whitelist)
+     
+    # mrz = re.sub('[^\w\d<]', '', mrz)
+    if debug:
+        add_fail(mrz)
     if len(mrz) != 88:
-        return {'error': 'Wrong length of MRZ'}
+        return {'error': 'Wrong length of MRZ', 'text':mrz}
     result = {}
     
     name = ''
