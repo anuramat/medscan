@@ -17,7 +17,7 @@ from skimage.io import imsave
 from skimage.restoration import denoise_bilateral, denoise_wavelet
 from skimage.morphology import dilation, erosion, opening, closing
 from skimage.morphology import disk
-
+from skimage.transform import rescale, resize
 from skimage.util import compare_images
 
 # TODO move
@@ -105,8 +105,14 @@ def wrapped_ocr(img, lang=None, whitelist=None):
     return text
 
 def process_discharge(input_images):
-    preprocessed_images = [preprocess_image(img, 256) for img in input_images]
-    text = ' '.join([wrapped_ocr(img) for img in preprocessed_images])
+    
+    text_pages = [] 
+    for img in input_images:
+        img = get_grayscale(img)
+        img = correct_skew(img)
+        # img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=None,nbins=256))
+        text_pages.append(wrapped_ocr(img))
+    text = '\n'.join(text_pages)
 
     sections_kws = kws2sections.keys()
     sections_kws = sorted(sections_kws, key=len, reverse=True)
@@ -183,11 +189,11 @@ def kwdict2sectiondict(kw2sectiontext):
 # make sure that symbols on either side of the numbers are not numbers (add to the regexp) TODO
 noise = '''."'`,\u00B0'''
 def process_insurance(img):
+    insurance_regex = re.compile(r'(\D|^)\d{16}(\D|$)')
     img = get_grayscale(img)
     img = correct_skew(img)
-    
     text = wrapped_ocr(img, lang='rus', whitelist='1234567890')
-    match = re.search(r'(\D|^)\d{16}(\D|$)', text)
+    match = re.search(insurance_regex, text)
     if debug:
         imsave(debug_folder + '/lastupload.png', img)
         add_fail(text) 
@@ -196,6 +202,8 @@ def process_insurance(img):
     return {'error':'not found', 'text' : text}
 
 def process_snils(img):
+    #TODO scaling (take average of working examples)
+    snils_regex = re.compile(r'(\D|^)\d{3}[- ]*\d{3}[- ]*\d{3}[- ]*\d{2}(\D|$)')
     # fine font
     img = get_grayscale(img)
     img = correct_skew(img)
@@ -207,20 +215,25 @@ def process_snils(img):
     if debug:
         imsave(debug_folder + '/lastupload.png', img)
     text = wrapped_ocr(img, lang='rus', whitelist='1234567890-')
-    match = re.search(r'\d{3}-+\d{3}-+(\d{5}|\d{3}-+\d{2})', text)
+    match = re.search(snils_regex, text)
     if match:
         return {'snils': re.sub(r'\D', '', match.group())}
 
     
     # thicc font 
-    img = initial_img
+    initial_img = rescale(initial_img, 0.7, anti_aliasing=True) # TODO fix later? find a magic value
+    img = initial_img.copy()
     img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=None,nbins=16))
-    img = skimage.morphology.opening(img, skimage.morphology.disk(2))
-    img = skimage.util.img_as_ubyte(unsharp_mask(img, 5, 2))
+    img = dilation(img, disk(3))
+    img = gaussian(img, 3)
+    img = median(img, np.ones((10,10)))
+    img = 1-compare_images(img,initial_img, method='diff')
+    img = skimage.util.img_as_ubyte(unsharp_mask(img, 5, 2))  
+    #img = rescale(img, 2, anti_aliasing=True) # TODO readd in case something breaks?
     if debug:
         imsave(debug_folder + '/lastupload2.png', img)
     text = wrapped_ocr(img, lang='rus', whitelist='1234567890-')
-    match = re.search(r'\d{3}-+\d{3}-+(\d{5}|\d{3}-+\d{2})', text)
+    match = re.search(snils_regex, text)
     if match:
         return {'snils': re.sub(r'\D', '', match.group())}
 
