@@ -1,3 +1,4 @@
+# TODO remove unnecessary dependencies
 from PIL import Image
 import cv2 
 import numpy as np
@@ -15,21 +16,42 @@ from skimage.morphology import binary_erosion, binary_opening, binary_closing, b
 from skimage.filters import threshold_otsu, unsharp_mask, median, gaussian
 from skimage.io import imsave
 from skimage.restoration import denoise_bilateral, denoise_wavelet
-from skimage.morphology import dilation, erosion, opening, closing
+from skimage.morphology import dilation, erosion, opening, closing, black_tophat
 from skimage.morphology import disk
 from skimage.transform import rescale, resize
 from skimage.util import compare_images
+from skimage.measure import find_contours
 
-# TODO move
+import easyocr
+reader = easyocr.Reader(['en'])
+
+# TODO move to dotfile or smth
 debug = True
 debug_folder = 'files/'
+def dsave(img, name):
+    if debug:
+        imsave(debug_folder + f'/{name}.png', img)
+    
 
+# TODO move to utils or smth
+def wrapped_ocr(img, lang=None, whitelist=None):
+    if not lang:
+        lang = 'rus+eng'
+    config = '--oem 1 --psm 1'
+    if whitelist:
+        config += ' -c tessedit_char_whitelist=' + whitelist
+    text = pytesseract.image_to_string(img, lang=lang, config=config)
+    return text
+
+# TODO use skimage
 def get_grayscale(image):
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
+# TODO use skimage
 def thresholding(image):
     return cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
+# TODO use skimage, rewrite
 def correct_skew(image, delta=1, limit=5, input_is_gray=False):
     def determine_score(arr, angle):
         data = inter.rotate(arr, angle, reshape=False, order=0)
@@ -59,6 +81,8 @@ def correct_skew(image, delta=1, limit=5, input_is_gray=False):
     return rotated
     return best_angle, rotated
 
+# TODO refactor from here
+
 def prettier_text(input_text):
     cleaner = lambda match: '\n' if '\n' in match.group() else ' '
     result = re.sub(r'\s+', cleaner, input_text).strip()
@@ -75,7 +99,7 @@ kws2sections = transpose_dict(sections2kws)
 def find_fields(text):
 
     fields = {}
-    
+  
     # special case - name; no other fields yet, so it's tolerable
     # later the entire function should be rewritten
 
@@ -95,14 +119,6 @@ def find_fields(text):
             break
     return fields
 
-def wrapped_ocr(img, lang=None, whitelist=None):
-    if not lang:
-        lang = 'rus+eng'
-    config = '--oem 1 --psm 1'
-    if whitelist:
-        config += ' -c tessedit_char_whitelist=' + whitelist
-    text = pytesseract.image_to_string(img, lang=lang, config=config)
-    return text
 
 def process_discharge(input_images):
     
@@ -127,6 +143,7 @@ def process_discharge(input_images):
                 # TODO: test if it still works without the next line
                 # kw_ = kw[0].upper() + kw[1:]
                 # keyword is at least: prefixed with newline, postfixed with newline, or postfixed with colon
+                '.(?=\n{kw}|{kw}[\n:])'
                 sub_pieces = re.split(f'\n{kw}|{kw}[\n:]', pieces[piece_idx]) 
                 # remove non-alphanumeric symbols in the start of the string
                 # TODO: test if it is useful
@@ -185,43 +202,111 @@ def kwdict2sectiondict(kw2sectiontext):
         sectiondict[section] += kw2sectiontext[kw] + '\n'
     return sectiondict
 
-# checksum? more than one? raise error TODO also in insurance iterate over matches to see if one of them checks out
-# make sure that symbols on either side of the numbers are not numbers (add to the regexp) TODO
-noise = '''."'`,\u00B0'''
+# TODO refactor to here
+
 def process_insurance(img):
-    insurance_regex = re.compile(r'(\D|^)\d{16}(\D|$)')
     img = get_grayscale(img)
+
+    # try scaling to 1k by whatever if accuracy drops
+    img = np.asarray(img)
     img = correct_skew(img)
-    text = wrapped_ocr(img, lang='rus', whitelist='1234567890')
-    match = re.search(insurance_regex, text)
-    if debug:
-        imsave(debug_folder + '/lastupload.png', img)
-        add_fail(text) 
-    if match:
-        return {'insurance': match.group().strip()}
-    return {'error':'not found', 'text' : text}
+
+    input_img = img.copy() # save for when we find the numbers
+
+    # find the barcode under the numbers
+    # first use blur and morphological operations to turn the barcode into a solid rectangle
+    img = black_tophat(img, np.ones((1,200)))
+    img = median(img, np.ones((1,20)))
+    img = closing(img, np.ones((20,20)))
+
+    img = threshold_otsu(img)<img
+
+    img = closing(img, np.ones((20,1)))  # vertical fill
+    img = opening(img, np.ones((20,20))) # shrink stuff
+
+    # find the edges of the resulting rectangle
+    contours = find_contours(img)
+
+    '''
+    # save visualization of contours just in case
+    fig, ax = plt.subplots()
+    ax.imshow(img, cmap='gray')
+    for contour in contours:
+        ax.plot(contour[:,1], contour[:, 0], linewidth=2)
+    plt.show()
+    '''
+
+    # now we calculate the bounding boxes
+    bounding_boxes = [] # here we store all the bounding boxes, that correspond to the found contours
+    matches = [] # here we store just the candidates to be a barcode (we hope that we find just one)
+
+    for contour in contours:
+        
+        # find a box and calculate its properties
+        box = {'x_min': np.min(contour[:,1]),
+                'x_max': np.max(contour[:,1]),
+                'y_min': np.min(contour[:,0]),
+                'y_max': np.max(contour[:,0])}
+        width = box['width'] = box['x_max'] - box['x_min']
+        height = box['height'] = box['y_max'] - box['y_min']
+        area = box['area'] = width*height
+        ar = box['ar'] = width/height
+        ira = box['ira'] = np.product(img.shape)/area
+        
+        # save it to the list
+        bounding_boxes.append(box)
+    # TODO figure how the fuck this works    
+        # check if it matches the criteria
+        ira_match = 40<ira<55 or True # TODO remove HACK 
+        ar_match = 4<ar<5
+        if ira_match and ar_match:
+            matches.append(box)
+    
+    # check if theres a clear winner
+    #if len(matches) != 1:
+    #    return {'error': 'more than one candidate for barcode'}
+    matches = sorted(matches, key = lambda x: x['ar']) 
+
+    # now lets find the part of the image with numbers by just flipping our barcode rectangle once
+    numbers_box = matches[0]
+    numbers_box['y_min'] -= numbers_box['height']
+    numbers_box['y_max'] -= numbers_box['height']
+    for key in ['x_min','x_max','y_min','y_max']:
+        numbers_box[key] = int(numbers_box[key])
+    numbers_img = input_img[numbers_box['y_min']: numbers_box['y_max'], numbers_box['x_min']:numbers_box['x_max']]
+    
+    # start OCR
+    text = wrapped_ocr(numbers_img, lang='eng', whitelist='1234567890')
+    text = re.sub(r'\D', '', text)
+    if len(text) == 16:
+        return {'insurance': text}
+    return {'error':'error', 'text' : text}
 
 def process_snils(img):
-    #TODO scaling (take average of working examples)
     snils_regex = re.compile(r'(\D|^)\d{3}[- ]*\d{3}[- ]*\d{3}[- ]*\d{2}(\D|$)')
-    # fine font
     img = get_grayscale(img)
     img = correct_skew(img)
     initial_img = img.copy() 
+
+
+    # fine font
     img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=None,nbins=16))
     img = skimage.morphology.opening(img, skimage.morphology.disk(3))
     img = skimage.util.img_as_ubyte(unsharp_mask(img, 10, 3))
     img = skimage.morphology.erosion(img, skimage.morphology.disk(3))
-    if debug:
-        imsave(debug_folder + '/lastupload.png', img)
     text = wrapped_ocr(img, lang='rus', whitelist='1234567890-')
     match = re.search(snils_regex, text)
     if match:
-        return {'snils': re.sub(r'\D', '', match.group())}
+        return {'type': 'fine', 'snils': re.sub(r'\D', '', match.group())}
 
-    
+     
     # thicc font 
-    initial_img = rescale(initial_img, 0.7, anti_aliasing=True) # TODO fix later? find a magic value
+    # TODO try without rescaling
+    initial_img = rescale(initial_img, 0.7, anti_aliasing=True) # TODO fix later? find a magic value (0.7 as of now)
+    initial_height = initial_img.shape[0]
+    target_height = 800
+    scaling_factor = target_height/initial_height
+    initial_img = rescale(initial_img, scaling_factor, anti_aliasing=True)
     img = initial_img.copy()
     img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=None,nbins=16))
     img = dilation(img, disk(3))
@@ -230,18 +315,14 @@ def process_snils(img):
     img = 1-compare_images(img,initial_img, method='diff')
     img = skimage.util.img_as_ubyte(unsharp_mask(img, 5, 2))  
     #img = rescale(img, 2, anti_aliasing=True) # TODO readd in case something breaks?
-    if debug:
-        imsave(debug_folder + '/lastupload2.png', img)
     text = wrapped_ocr(img, lang='rus', whitelist='1234567890-')
     match = re.search(snils_regex, text)
     if match:
-        return {'snils': re.sub(r'\D', '', match.group())}
+        return {'type':'thicc', 'snils': re.sub(r'\D', '', match.group())}
 
 
     # fail
-    if debug:
-        add_fail(text) 
-    return {'error':'not found', 'text' : text}
+    return {'error':'error', 'text' : text}
 
 def mrz_checksum(value):
     weights = [7,3,1]
@@ -259,7 +340,9 @@ mrz_dict = {eng_alphabet[i]: rus_alphabet[i] for i in range(len(eng_alphabet))}
 def process_passport(img):
     img = get_grayscale(img)
     img = correct_skew(img)
-    input_img = img.copy() 
+    input_img = img.copy()
+    # img = skimage.util.img_as_ubyte(equalize_adapthist(img, kernel_size=None,nbins=256))
+
     height = 600
     ratio = img.shape[1]/img.shape[0] # width/height
     width = int(ratio*height)
@@ -270,7 +353,7 @@ def process_passport(img):
     sqKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 21))
     img = cv2.GaussianBlur(img, (3, 3), 0)
     img = cv2.morphologyEx(img, cv2.MORPH_BLACKHAT, rectKernel)
-    img = cv2.Sobel(img, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
+    img = cv2.Sobel(img, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=-1)
     img = np.absolute(img)
     (minVal, maxVal) = (np.min(img), np.max(img))
     img = (255 * ((img - minVal) / (maxVal - minVal))).astype("uint8")
@@ -306,13 +389,19 @@ def process_passport(img):
             mrz_img = input_img[y:y + h, x:x + w].copy()
             break
     if type(mrz_img) is not np.ndarray or np.prod(mrz_img.shape) == 0:
-        return {'error': 'MRZ was not found'}
+        #return {'error': 'MRZ was not found'}
+        # brute force fallback: get bottom
+        approx_mrz_start = int(0.8*input_img.shape[0])
+        mrz_img = input_img[approx_mrz_start:, :]
     img = mrz_img.copy()
 
-    if debug:
-        cv2.imwrite(debug_folder + "/lastupload.png", input_img) 
     whitelist = '<ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'
     # OCR STARTS HERE
+    target_height = 200
+    initial_height = img.shape[0]
+    scaling_factor = target_height/height
+    #img = rescale(img, scaling_factor) # TODO turn on and check
+
     input_img = img.copy()
     img = dilation(img)
     img = median(img, np.ones((10,10)))
@@ -321,15 +410,13 @@ def process_passport(img):
     img = skimage.util.img_as_ubyte(img)
     # OCR END
     
-    if debug:
-        cv2.imwrite(debug_folder + "/lastupload2.png", img) 
     mrz = wrapped_ocr(img, lang='eng', whitelist=whitelist)
     
-    mrz = mrz.strip() 
-    mrz_lines = mrz.split('\n')
+    mrz = mrz.strip()
+    mrz_lines = mrz.split() # TODO parse propersly: ignore spaces in the middle of the lines
      
     if len(mrz_lines) != 2 or len(mrz) < 60:
-        return {'error': 'xd', 'text': mrz}
+        return {'error': 'error', 'text': mrz}
     
     for i in range(2):
         mrz_lines[i] = mrz_lines[i].ljust(44, '<')[:44]
@@ -342,9 +429,11 @@ def process_passport(img):
     # MRZ parser
     # TODO: make robust in terms of scanos 
     # TODO: add check: if len(mrz)==88(+1)
+    eng_alphabet = 'ABVGDE2JZIQKLMNOPRSTUFHC34WXY9678'
+    rus_alphabet = 'АБВГДЕЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'
+    mrz_dict = {eng_alphabet[i]: rus_alphabet[i] for i in range(len(eng_alphabet))}
+
     result = {}
-    if debug:
-        result['mrz_line'] = mrz_lines
     name = ''
     for i in ' '.join(mrz[5:44].split('<')):
         if i in eng_alphabet:
@@ -356,14 +445,16 @@ def process_passport(img):
     
     mrz = mrz[44:]
     reverse_date = lambda x: x[4:] + x[2:4] + x[:2]
-    
+    add_dots = lambda x: x[:2] + '.' + x[2:4] + '.' + x[4:]
+    format_datestr = lambda x: add_dots(reverse_date(x))
+
     result['id_series'] = mrz[:3] + mrz[28]
     result['id_no'] = mrz[3:9]
     result['corr_1'] = mrz_checksum(mrz[:9]) == mrz[9]
-    result['dob'] = reverse_date(mrz[13:19])
+    result['dob'] = format_datestr(mrz[13:19])
     result['corr_2'] = mrz_checksum(mrz[13:19]) == mrz[19]
     result['sex'] = mrz[20]
-    result['issued'] = reverse_date(mrz[29:35])
+    result['issued'] = format_datestr(mrz[29:35])
     result['authority_code'] = mrz[35:41]
     result['corr_3'] = mrz_checksum(mrz[28:41]) == mrz[42]
     result['corr_final'] = mrz_checksum(mrz[:10]+mrz[13:20]+mrz[21:28]+mrz[28:43]) == mrz[43]
@@ -377,15 +468,62 @@ def process_passport(img):
 def text_recognition(input_images, doc_type):
     if doc_type == 'passport':
         return process_passport(input_images[0])
-    elif doc_type == 'discharge':
+    if doc_type == 'discharge':
         return process_discharge(input_images)
-    elif doc_type == 'insurance':
+    if doc_type == 'insurance':
         return process_insurance(input_images[0])
-    elif doc_type == 'snils':
+    if doc_type == 'snils':
         return process_snils(input_images[0])
+    if doc_type == 'card':
+        return process_card(input_images[0])
+    if doc_type == 'emb':
+        return process_emb(input_images[0])
 
-def add_fail(text):
-    # parameterize the folder TODO
-    res = '\n\n\n****upload start****\n\n\n' + text + '\n\n\n****upload end\n\n\n'
-    with open(debug_folder + '/fails.txt', 'a+') as textfile:
-        textfile.write(res) 
+
+def process_card(img):
+    img = get_grayscale(img)
+    img = correct_skew(img)
+    input_img = img.copy()
+    img = dilation(img)
+    img = median(img, np.ones((20,20)))
+    img = 1-compare_images(img,input_img, method='diff')
+    img = skimage.util.img_as_ubyte(img)
+    dsave(img, 'card')
+
+    text = wrapped_ocr(img, whitelist = '1234567890')
+    lines = text.split()
+    result = {}
+    for line in lines[::-1]:
+        numbers = re.sub('\D', '', line)
+        if len(numbers) == 16:
+            result['insurance'] = numbers
+            break
+    if 'insurance' not in result:
+        numbers = re.sub('\D', '', text)
+        if len(numbers) == 16:
+            result['insurance'] = numbers
+        
+    if 'insurance' not in result:
+        result['error'] = 'error'        
+        result['text'] = text 
+    return result
+    
+
+def process_emb(img):
+    img = get_grayscale(img)
+    img = correct_skew(img)
+
+    img = skimage.util.img_as_ubyte(img)
+
+    easyocr_result = reader.readtext(img, allowlist = '0123456789', width_ths = 1)
+    easyocr_result = sorted(easyocr_result, key = lambda x: x[1], reverse=True)
+    result = {}
+    for block in easyocr_result:
+        if len(block[1]) == 16:
+            result['insurance'] = block[1]
+            result['confidence'] = block[2]
+
+    if 'insurance' not in result:
+        result['error'] = 'error' 
+        result['text'] = [block[1] for block in easyocr_result]
+    return result
