@@ -143,8 +143,8 @@ def process_discharge(input_images):
                 # TODO: test if it still works without the next line
                 # kw_ = kw[0].upper() + kw[1:]
                 # keyword is at least: prefixed with newline, postfixed with newline, or postfixed with colon
-                '.(?=\n{kw}|{kw}[\n:])'
-                sub_pieces = re.split(f'\n{kw}|{kw}[\n:]', pieces[piece_idx]) 
+                sub_pieces = re.split(f'.(?=\n{kw}|{kw}[\n:])', pieces[piece_idx]) 
+                # sub_pieces = re.split(f'\n{kw}|{kw}[\n:]', pieces[piece_idx]) 
                 # remove non-alphanumeric symbols in the start of the string
                 # TODO: test if it is useful
                 for i in range(1, len(sub_pieces)):
@@ -190,7 +190,12 @@ def process_discharge(input_images):
 
     fields = find_fields(text)
     result.update(fields) # add fields to the result (such as name and date)
+   
 
+    # TODO remove, figure out if junk should be the same as the comments
+    print(result)
+    result['junk'] += result['comments'] 
+    
     return result
 
 

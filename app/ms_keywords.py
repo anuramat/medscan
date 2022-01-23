@@ -13,7 +13,7 @@ sections2kws = {
 "assignments": ["назначения"],
 "recommendation": ["рекомендации", "рекомендовано"],
 "comments": ["комментарий", "комментарии", "заключение", "комментарии и динамика состояния"],
-"junk": ['junk'],
+"junk": ['Junk'],
 "consultations": [],
 "labs": []
 }
@@ -23,7 +23,7 @@ fields2kws = {
 "name": ['Пациент', 'Ф.И.О. больного', 'Больной', 'ФИО', 'Больной (ая)', 'Ф.И.О. пациента', 'Пациент', 'Ф.И.О.', 'Больной (-ая)', 'Пациентка', 'Больная', 'ИБ No'],
 "date": []
 }
-'''
+
 add_words(sections2kws, 'anamnesis', '''
 в анамнезе
 An Vitae
@@ -52,7 +52,7 @@ add_words(sections2kws, 'assignments', '''
 Проведено лечение
 Лекарственная терапия
 Прием препаратов
-ЛЕЧЕНИЕ
+Лечение
 ''')
 
 add_words(sections2kws, 'recommendation', '''
@@ -104,7 +104,7 @@ add_words(sections2kws, 'labs', '''
 вазодилатация
 имплантирован стент
 Учитывая данные КАГ
-АОРТОГРАФИЯ
+Аортография
 предилатация
 баллонным катетером
 СТРЕСС-ЭХОКГ
@@ -134,7 +134,6 @@ Rg-графия
 Послеоперационное обследование
 ''')
 
-'''
 for section in sections2kws:
     for idx in range(len(sections2kws[section])):
         sections2kws[section][idx] = sections2kws[section][idx][0].upper() + sections2kws[section][idx][1:]
