@@ -137,23 +137,19 @@ def process_discharge(input_images):
     pieces = [text]
     is_kw = [False]
     for kw in sections_kws:
+        if kw == 'Junk':
+            continue
         piece_idx = 0
         while piece_idx < len(pieces):
             if not is_kw[piece_idx]:
-                # TODO: test if it still works without the next line
-                # kw_ = kw[0].upper() + kw[1:]
                 # keyword is at least: prefixed with newline, postfixed with newline, or postfixed with colon
-                sub_pieces = re.split(f'.(?=\n{kw}|{kw}[\n:])', pieces[piece_idx]) 
-                # sub_pieces = re.split(f'\n{kw}|{kw}[\n:]', pieces[piece_idx]) 
-                # remove non-alphanumeric symbols in the start of the string
-                # TODO: test if it is useful
+                sub_pieces = re.split(f'(\n{kw}|{kw}[\n:])', pieces[piece_idx]) 
+                # remove ":" in the beginning and end of each string
                 for i in range(1, len(sub_pieces)):
-                    match = re.search(f'[\w]', sub_pieces[i]) 
-                    if match:
-                        sub_pieces[i] = sub_pieces[i][match.start():]
+                    sub_pieces[i] = sub_pieces[i].strip(':\n')
                 sub_is_kw = [False]*len(sub_pieces)
                 sub_is_kw = list(intersperse(True, sub_is_kw))
-                sub_pieces = list(intersperse(kw, sub_pieces))
+                # sub_pieces = list(intersperse(kw, sub_pieces))
                 pieces[piece_idx:piece_idx+1] = sub_pieces
                 is_kw[piece_idx:piece_idx+1] = sub_is_kw
                 piece_idx += len(sub_pieces) 
@@ -181,7 +177,8 @@ def process_discharge(input_images):
     # finally put them in our dict 
     kw2sectiontext = {}   
     for piece_idx in range(0,len(pieces),2):
-        kw2sectiontext[pieces[piece_idx]] = pieces[piece_idx+1]
+        header = pieces[piece_idx] + '\n' if pieces[piece_idx]!='Junk' else ''
+        kw2sectiontext[pieces[piece_idx]] = header + pieces[piece_idx+1]
 
     # transition from keywords to internal section names
     result = kwdict2sectiondict(kw2sectiontext)
